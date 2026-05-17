@@ -61,10 +61,8 @@ This is the original Vapor Cloud deployment manifest. **Vapor Cloud shut down in
 ### 2. Docker (`web.Dockerfile`)
 
 Two-stage build:
-- **Builder stage**: `swift:4.2` — compiles the release binary
-- **Runtime stage**: `ubuntu:16.04` — runs the binary
-
-> ⚠️ `ubuntu:16.04` reached end-of-life in April 2021 and no longer receives security patches.
+- **Builder stage**: `swift:5.9-focal` — compiles the release binary
+- **Runtime stage**: `ubuntu:22.04` — runs the binary
 
 ```bash
 # Build image
@@ -91,10 +89,12 @@ swift build -c release
 
 File: `.circleci/config.yml`
 
+> ⚠️ The CircleCI config still targets `swift:4.1` and needs to be updated to `swift:5.9` or later to reflect the Vapor 4 migration.
+
 | Job | Image | Steps |
 |-----|-------|-------|
-| `linux` | `swift:4.1` | `swift build` + `swift test` |
-| `linux-release` | `swift:4.1` | `swift build -c release` |
+| `linux` | `swift:4.1` *(outdated)* | `swift build` + `swift test` |
+| `linux-release` | `swift:4.1` *(outdated)* | `swift build -c release` |
 
 Triggered on every commit and nightly on `master`. No deployment step. No Docker image push.
 

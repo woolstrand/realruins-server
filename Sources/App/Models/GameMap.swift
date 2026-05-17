@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import FoundationXML
 import Fluent
 import Vapor
 import Gzip

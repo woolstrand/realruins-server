@@ -5,6 +5,8 @@
 //  Created by IC on 16/01/2019.
 //
 
+import Foundation
+import FoundationXML
 import Vapor
 import Fluent
 import FluentMySQLDriver
