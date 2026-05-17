@@ -47,6 +47,11 @@ public func configure(_ app: Application) throws {
         region: "sfo2"
     )
 
+    // Warn loudly if any credential is still using the placeholder value.
+    if [DatabasePassword, S3ApiKey, S3ApiSecret].contains("123456") {
+        app.logger.warning("One or more credentials are using placeholder values. Set MYSQL_PASSWORD, S3_API_KEY and S3_API_SECRET environment variables before running in production.")
+    }
+
     // MARK: - Routes
     try routes(app)
 }

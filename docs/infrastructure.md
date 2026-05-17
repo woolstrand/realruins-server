@@ -12,19 +12,30 @@
 
 ## Configuration & Secrets
 
-Credentials are defined in `Sources/App/secureconstants.swift`:
+Credentials are read from environment variables at startup, with placeholder fallbacks
+when the variables are not set:
 
-```swift
-let DatabasePassword = "123456"
-let S3ApiKey         = "123456"
-let S3ApiSecret      = "123456"
+| Environment variable | Purpose | Default (placeholder) |
+|----------------------|---------|----------------------|
+| `MYSQL_PASSWORD`     | MySQL password | `123456` |
+| `S3_API_KEY`         | DigitalOcean Spaces access key | `123456` |
+| `S3_API_SECRET`      | DigitalOcean Spaces secret key | `123456` |
+
+The values are read in `Sources/App/secureconstants.swift` using `ProcessInfo.processInfo.environment`.
+
+For Docker deployments, pass secrets at **runtime** — not at build time — so they are never
+baked into the image:
+
+```bash
+docker run -p 80:80 \
+  -e MYSQL_PASSWORD=<real-password> \
+  -e S3_API_KEY=<real-key> \
+  -e S3_API_SECRET=<real-secret> \
+  ghcr.io/woolstrand/realruins-server:latest
 ```
 
-The values committed to the repository are **dummy placeholders**. They are replaced with real credentials manually at deployment time. This file is not intended to hold production secrets.
-
-> ⚠️ The manual substitution step is error-prone and prevents automated multi-environment deployments. See `docs/suggestions.md` (Section 2 — "Secrets not externalised") for the recommended fix.
-
-No environment variable or config-file based configuration exists. Any credential change requires editing this file and rebuilding.
+The GitHub Actions secrets `MYSQL_PASSWORD`, `S3_API_KEY`, and `S3_API_SECRET` stored in the
+`staging` and `production` environments map directly to these variable names.
 
 ---
 
@@ -92,21 +103,18 @@ docker pull ghcr.io/woolstrand/realruins-server:latest
 
 ---
 
-## Recommended Environment Variables (Future)
+## Other Hardcoded Values
 
-These values should be extracted from hardcoded constants and supplied via environment:
+The following values are still hardcoded. They could be extracted similarly to the credentials above:
 
 | Variable | Purpose |
 |----------|---------|
 | `DB_HOST` | MySQL hostname (default: `localhost`) |
 | `DB_PORT` | MySQL port (default: `3306`) |
 | `DB_USER` | MySQL username |
-| `DB_PASSWORD` | MySQL password |
 | `DB_NAME` | MySQL database name |
 | `S3_BUCKET` | Spaces bucket name |
 | `S3_HOST` | Spaces endpoint host |
 | `S3_REGION` | Spaces region |
-| `S3_ACCESS_KEY` | Spaces API key |
-| `S3_SECRET_KEY` | Spaces API secret |
 
 See `docs/suggestions.md` for a staging/production deployment plan.

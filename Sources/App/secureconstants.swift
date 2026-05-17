@@ -7,6 +7,6 @@
 
 import Foundation
 
-let DatabasePassword = "123456"
-let S3ApiKey = "123456"
-let S3ApiSecret = "123456"
+let DatabasePassword = ProcessInfo.processInfo.environment["MYSQL_PASSWORD"] ?? "123456"
+let S3ApiKey         = ProcessInfo.processInfo.environment["S3_API_KEY"] ?? "123456"
+let S3ApiSecret      = ProcessInfo.processInfo.environment["S3_API_SECRET"] ?? "123456"
