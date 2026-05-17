@@ -7,9 +7,8 @@
 
 import Vapor
 import Fluent
-import FluentMySQL
-import MySQL
-import Storage
+import FluentMySQLDriver
+import SQLKit
 
 
 /// Request structures
@@ -21,7 +20,6 @@ struct Limit: Content {
     let limit: Int?
     let offset: Int?
 }
-
 
 struct MapFilter: Content {
     let mapSize: Int?
@@ -63,311 +61,289 @@ struct Distribution: Content {
     let data: [[Int]]
 }
 
+/// Internal struct for raw SQL decoding of distribution query
+private struct DistributionRawRow: Decodable {
+    let coverage: Int
+    let mapSize: Int
+    let coverageCount: Int
+}
+
 /// Controls basic CRUD operations on `Map`s.
 final class MapsController {
-    /// Returns a list of all `Map`s.
-    func index(_ req: Request) throws -> Future<[GameMap]> {
+
+    /// Returns a paginated list of all `GameMap`s.
+    func index(_ req: Request) async throws -> [GameMap] {
         let limitObj = try? req.query.decode(Limit.self)
         let limit = limitObj?.limit ?? 50
         let offset = limitObj?.offset ?? 0
-        
-        return GameMap.query(on: req).range(offset..<(offset+limit)).all()
+
+        return try await GameMap.query(on: req.db)
+            .range(offset..<(offset + limit))
+            .all()
     }
-    
-    func random(_ req: Request) throws -> Future<[GameMap]> {
+
+    func random(_ req: Request) async throws -> [GameMap] {
         let limitObj = try? req.query.decode(Limit.self)
         let limit = limitObj?.limit ?? 50
-        
-        //here I return <limit> of records starting from random ID. It actually doesn't matter that maps are following one after another as those maps will be used as just ingredients.
-        return req.withPooledConnection(to: .mysql) { conn throws -> Future<[GameMap]> in
-            return conn.raw("SELECT * FROM GameMap JOIN (SELECT (RAND() * (SELECT MAX(id) FROM GameMap)) AS id) AS r2 WHERE GameMap.id >= r2.id ORDER BY GameMap.id ASC LIMIT \(limit);").all(decoding:GameMap.self)
-            }
-    }
-    
-    func withSeed(_ req: Request) throws -> Future<[GameMap]> {
-        if let seed = try? req.parameters.next(String.self) {
-            let seedDecoded = seed.removingPercentEncoding ?? seed
-  
-            let limitObj = try? req.query.decode(Limit.self)
-            let limit = limitObj?.limit ?? 50
-            let offset = limitObj?.offset ?? 0
-            let filter = try? req.query.decode(MapFilter.self)
 
-            var result = GameMap
-                .query(on: req)
-                .filter(\.seed == seedDecoded)
-            
-            if let mapSize = filter?.mapSize {
-                if (mapSize != -1) {
-                    result = result.filter(\.mapSize == mapSize)
-                }
-            }
-            
-            if let coverage = filter?.coverage {
-                if (coverage != -1) {
-                    result = result.filter(\.coverage == coverage)
-                }
-            }
-            
-            return
-                result
-                .sort(MySQLOrderBy.orderBy(MySQLExpression.function("RAND"), MySQLDirection.ascending))
-                .range(offset..<offset+limit)
-                .all()
-        } else {
+        // Returns <limit> records starting from a random ID to avoid full-table scan.
+        return try await req.sqlDb
+            .raw("""
+                SELECT GameMap.* FROM GameMap
+                JOIN (SELECT (RAND() * (SELECT MAX(id) FROM GameMap)) AS id) AS r2
+                WHERE GameMap.id >= r2.id
+                ORDER BY GameMap.id ASC
+                LIMIT \(bind: limit)
+                """)
+            .all(decoding: GameMap.self)
+    }
+
+    func withSeed(_ req: Request) async throws -> [GameMap] {
+        guard let seed = req.parameters.get("seed") else {
             throw RealRuinsError.invalidParameters("No seed provided")
         }
+        let seedDecoded = seed.removingPercentEncoding ?? seed
+
+        let limitObj = try? req.query.decode(Limit.self)
+        let limit = limitObj?.limit ?? 50
+        let offset = limitObj?.offset ?? 0
+        let filter = try? req.query.decode(MapFilter.self)
+
+        var query = GameMap.query(on: req.db)
+            .filter(\.$seed == seedDecoded)
+
+        if let mapSize = filter?.mapSize, mapSize != -1 {
+            query = query.filter(\.$mapSize == mapSize)
+        }
+
+        if let coverage = filter?.coverage, coverage != -1 {
+            query = query.filter(\.$coverage == coverage)
+        }
+
+        return try await query
+            .sort(DatabaseQuery.Sort.sort(.custom("RAND()"), .ascending))
+            .range(offset..<(offset + limit))
+            .all()
     }
-    
-    func distribution(_ req: Request) throws -> Future<Distribution> {
+
+    func distribution(_ req: Request) async throws -> Distribution {
         let coverages = [0, 5, 30, 50, 100, -1]
         let sizes = [0, 200, 225, 250, 275, 300, 325, 350, 400, -1]
-        let seed = try req.parameters.next(String.self)
-        
-        return req.withPooledConnection(to: .mysql) { conn throws -> Future<[[MySQLColumn: MySQLData]]> in
-            return conn.raw("SELECT coverage, mapSize, count(coverage) FROM GameMap WHERE seed = BINARY \"\(seed)\" GROUP BY coverage, mapSize").all()
-            }.map(to: Distribution.self, { (result) -> Distribution in
-                var data = Array<Array<Int>>(repeating: Array<Int>(repeating: 0, count: sizes.count),
-                                             count: coverages.count)
-                
-                let coverageCol = MySQLColumn(table: "GameMap", name: "coverage")
-                let sizeCol = MySQLColumn(table: "GameMap", name: "mapSize")
-                let countCol = MySQLColumn(name: "count(coverage)")
-                
-                for row in result {
-                    let coverage = try row[coverageCol]?.integer(Int32.self) ?? 0
-                    let size = try row[sizeCol]?.integer(Int32.self) ?? 0
-                    let count: Int32 = ((try row[countCol]?.integer(Int32.self)) ?? 0)
-                    
-                    let coverageIndex = coverages.index(of: Int(coverage)) ?? coverages.count - 1
-                    let sizeIndex = sizes.index(of: Int(size)) ?? sizes.count - 1
-                    data[coverageIndex][sizeIndex] += Int(count)
-                }
-                
-                let distr = Distribution(sizes: sizes, coverages: coverages, data: data)
-                return distr
-            })
-        
+
+        guard let seed = req.parameters.get("seed") else {
+            throw RealRuinsError.invalidParameters("No seed provided")
+        }
+
+        let rows = try await req.sqlDb
+            .raw("""
+                SELECT coverage, mapSize, COUNT(coverage) AS coverageCount
+                FROM GameMap
+                WHERE seed = BINARY \(bind: seed)
+                GROUP BY coverage, mapSize
+                """)
+            .all(decoding: DistributionRawRow.self)
+
+        var data = Array(repeating: Array(repeating: 0, count: sizes.count), count: coverages.count)
+
+        for row in rows {
+            let coverageIndex = coverages.firstIndex(of: Int(row.coverage)) ?? (coverages.count - 1)
+            let sizeIndex = sizes.firstIndex(of: Int(row.mapSize)) ?? (sizes.count - 1)
+            data[coverageIndex][sizeIndex] += Int(row.coverageCount)
+        }
+
+        return Distribution(sizes: sizes, coverages: coverages, data: data)
     }
-    
-    func topSeeds(_ req: Request) throws -> Future<[Seed]> {
+
+    func topSeeds(_ req: Request) async throws -> [Seed] {
         let limitObj = try? req.query.decode(Limit.self)
         var limit = limitObj?.limit ?? 50
         let offset = limitObj?.offset ?? 0
-        if (limit > 1000) {limit = 1000}
-        
-        return req.withPooledConnection(to: .mysql) { conn throws -> Future<[Seed]> in
-            return conn.raw("SELECT seed, COUNT(*) AS num FROM GameMap GROUP BY seed ORDER BY num DESC LIMIT \(limit) OFFSET \(offset)")
-                .all(decoding: Seed.self)
-            }
-    }
-    
+        if limit > 1000 { limit = 1000 }
 
-    /// Saves a decoded `GameMap` to the database.
-    func create(_ req: Request) throws -> Future<GameMap> {
-        guard let data = req.http.body.data else {
-            return req.eventLoop.newFailedFuture(error: RealRuinsError.noData())
-        }
-        
-        //on some reason it doesn't work with gameId as Int, so I have to use String
-        let gameId = try? req.query.decode(GameId.self)
-        let gameMap = try GameMap.init(blueprintData: data, externalGameId: UInt64(gameId?.gameId ?? ""))
-        
-        return GameMap.query(on: req)
-            .filter(\.gameId == gameMap.gameId)
-            .filter(\.tileId == gameMap.tileId)
-            .first().flatMap { (storedMap) -> EventLoopFuture<GameMap> in
-            
-            if let storedMap = storedMap {
-                /// Updating existing map
-                storedMap.updatedAt = Date()
-                storedMap.height = gameMap.height
-                storedMap.width = gameMap.width
-                return try Storage
-                    .upload(bytes: data,
-                            fileName: storedMap.nameInBucket,
-                            fileExtension: "bp", mime: "application/octet-stream",
-                            folder: nil, on: req)
-                    .flatMap({ (result) -> EventLoopFuture<GameMap> in
-                        return storedMap.update(on: req)
-                    })
+        return try await req.sqlDb
+            .raw("""
+                SELECT seed, COUNT(*) AS num FROM GameMap
+                GROUP BY seed
+                ORDER BY num DESC
+                LIMIT \(bind: limit) OFFSET \(bind: offset)
+                """)
+            .all(decoding: Seed.self)
+    }
 
-                
-            } else {
-                /// Creating a new map object
-                let filename = UUID.init().uuidString;
-                return try Storage
-                    .upload(bytes: data,
-                            fileName: filename,
-                            fileExtension: "bp", mime: "application/octet-stream",
-                            folder: nil, on: req)
-                    .flatMap({ (result) -> EventLoopFuture<GameMap> in
-                        gameMap.nameInBucket = filename
-                        return gameMap.save(on: req)
-                })
-            }
+    /// Saves a decoded `GameMap` to the database and uploads blueprint to S3.
+    func create(_ req: Request) async throws -> GameMap {
+        guard let data = req.body.data else {
+            throw RealRuinsError.noData()
+        }
+
+        // gameId is sent as a String query param to avoid integer overflow issues.
+        let gameIdStr = try? req.query.decode(GameId.self)
+        let rawData = Data(buffer: data)
+        let gameMap = try GameMap(blueprintData: rawData, externalGameId: UInt64(gameIdStr?.gameId ?? ""))
+
+        if let storedMap = try await GameMap.query(on: req.db)
+            .filter(\.$gameId == gameMap.gameId)
+            .filter(\.$tileId == gameMap.tileId)
+            .first() {
+
+            // Update existing map
+            storedMap.updatedAt = Date()
+            storedMap.height = gameMap.height
+            storedMap.width = gameMap.width
+            try await req.s3Uploader.upload(client: req.client, data: data, fileName: storedMap.nameInBucket)
+            try await storedMap.update(on: req.db)
+            return storedMap
+
+        } else {
+            // Create new map
+            let filename = UUID().uuidString
+            try await req.s3Uploader.upload(client: req.client, data: data, fileName: filename)
+            gameMap.nameInBucket = filename
+            try await gameMap.save(on: req.db)
+            return gameMap
         }
     }
-    
-    func voteForRemoval(_ req: Request) throws ->  Future<HTTPStatus> {
-        return try self.vote(req, voteType: 500)
+
+    func voteForRemoval(_ req: Request) async throws -> HTTPStatus {
+        return try await vote(req, voteType: 500)
     }
-    
-    func voteForPromotion(_ req: Request) throws ->  Future<HTTPStatus> {
-        return try self.vote(req, voteType: 100)
+
+    func voteForPromotion(_ req: Request) async throws -> HTTPStatus {
+        return try await vote(req, voteType: 100)
     }
-    
-    func vote(_ req: Request, voteType: Int) throws -> Future<HTTPStatus> {
-        guard let ip = req.http.remotePeer.hostname,
-            let mapId = try? req.parameters.next(Int.self) else {
-                return req.eventLoop.newSucceededFuture(result: HTTPStatus.badRequest)
+
+    func vote(_ req: Request, voteType: Int) async throws -> HTTPStatus {
+        guard let ip = req.remoteAddress?.ipAddress,
+              let mapId = req.parameters.get("id", as: Int.self) else {
+            return .badRequest
         }
-        
-        return Vote
-            .query(on: req)
-            .filter(\.mapId == mapId)
-            .filter(\.ip == ip)
-            .filter(\.voteType == voteType)
-            .first()
-            .flatMap({ (vote) -> EventLoopFuture<HTTPStatus> in
-                if (vote != nil) {
-                    return req.eventLoop.newSucceededFuture(result: HTTPStatus.alreadyReported)
-                } else {
-                    let newVote = Vote(mapId: mapId, ip: ip, voteType: voteType)
-                    return newVote.save(on: req).transform(to: .ok)
-                }
-            })
-    }
-    
-    func delete(_ req: Request) throws -> Future<HTTPStatus> {
-        return try req.parameters.next(GameMap.self).flatMap { gameMap in
-            return gameMap.delete(on: req)
-            }.transform(to: .ok)
+
+        if try await Vote.query(on: req.db)
+            .filter(\.$mapId == mapId)
+            .filter(\.$ip == ip)
+            .filter(\.$voteType == voteType)
+            .first() != nil {
+            return .alreadyReported
+        }
+
+        let newVote = Vote(mapId: mapId, ip: ip, voteType: voteType)
+        try await newVote.save(on: req.db)
+        return .ok
     }
 }
 
-/// Returning map data in json format
+/// Returning map data in JSON format
 extension MapsController {
-    func json(_ req: Request) throws -> Future<[[GameCell]]> {
-        guard let mapId = try? req.parameters.next(Int.self) else {
-            throw RealRuinsError.invalidParameters("No ID provided")
-        }
-        
-        return GameMap
-            .find(mapId, on: req)
-            .flatMap(to: Response.self, { (gameMap) throws -> Future<Response> in
-                if let name = gameMap?.nameInBucket {
-                    let fullName = "https://realruinsv2.sfo2.digitaloceanspaces.com" + "/" + name + ".bp"
-                    return try req.client().get(fullName)
-                } else {
-                    return req.eventLoop.newFailedFuture(error: RealRuinsError.invalidParameters("not found"))
-                }
-            }).map(to: [[GameCell]].self, { (response) throws -> [[GameCell]] in
-                guard let blueprintData = response.http.body.data else {
-                    throw RealRuinsError.noData()
-                }
-                
-                guard let unzipped = try? blueprintData.gunzipped() else {
-                    throw RealRuinsError.malformedBlueprintGZIP()
-                }
-                
-                guard let blueprint = try? XMLDocument.init(data: unzipped, options: []) else {
-                    throw RealRuinsError.malformedBlueprintXML("Can't init XML")
-                }
-                
-                guard let root = blueprint.rootElement() else {
-                    throw RealRuinsError.malformedBlueprintXML("No root element found")
-                }
-                
-                guard let blueprintWidth = Int(root.attribute(forName: "width")?.stringValue ?? ""),
-                    let blueprintHeight = Int(root.attribute(forName: "height")?.stringValue ?? "") else {
-                        throw RealRuinsError.malformedBlueprintXML("No height or width provided")
-                }
-                
-                var cells: [[GameCell]] = [[]]
-                for y in 0..<blueprintHeight {
-                    cells.append(Array())
-                    for _ in 0..<blueprintWidth {
-                        cells[y].append(GameCell.init())
-                    }
-                }
-                
-                for node in root.elements(forName: "cell") {
-                    if let nodeX = Int(node.attribute(forName: "x")?.stringValue ?? ""),
-                        let nodeZ = Int(node.attribute(forName: "z")?.stringValue ?? "") {
-                        var gameCell = cells[nodeZ][nodeX]
-                        if let terrainDef = node.elements(forName: "terrain").first?.attribute(forName: "def")?.stringValue {
-                            gameCell.terrain = GameObject.init(def: terrainDef, stuffDef: nil, artDesc: nil)
-                        }
-                        
-                        for item in node.elements(forName: "item") {
-                            if let itemDef = item.attribute(forName: "def")?.stringValue {
-                                let stuffDef = item.attribute(forName: "stuffDef")?.stringValue
-                                gameCell.objects.append(GameObject(def: itemDef, stuffDef: stuffDef, artDesc: ""))
-                            }
-                        }
-                        cells[nodeZ][nodeX] = gameCell
-                    }
-                }
-                return cells
-            })
-    }
-    
-    func json2(_ req: Request) throws -> Future<[GameCell]> {
-        guard let mapId = try? req.parameters.next(Int.self) else {
-            throw RealRuinsError.invalidParameters("No ID provided")
-        }
-        
-        return GameMap
-            .find(mapId, on: req)
-            .flatMap(to: Response.self, { (gameMap) throws -> Future<Response> in
-                if let name = gameMap?.nameInBucket {
-                    let fullName = "https://realruinsv2.sfo2.digitaloceanspaces.com" + "/" + name + ".bp"
-                    return try req.client().get(fullName)
-                } else {
-                    return req.eventLoop.newFailedFuture(error: RealRuinsError.invalidParameters("not found"))
-                }
-            }).map(to: [GameCell].self, { (response) throws -> [GameCell] in
-                guard let blueprintData = response.http.body.data else {
-                    throw RealRuinsError.noData()
-                }
-                
-                guard let unzipped = try? blueprintData.gunzipped() else {
-                    throw RealRuinsError.malformedBlueprintGZIP()
-                }
-                
-                guard let blueprint = try? XMLDocument.init(data: unzipped, options: []) else {
-                    throw RealRuinsError.malformedBlueprintXML("Can't init XML")
-                }
-                
-                guard let root = blueprint.rootElement() else {
-                    throw RealRuinsError.malformedBlueprintXML("No root element found")
-                }
 
-                var cells: [GameCell] = []
-                
-                for node in root.elements(forName: "cell") {
-                    if let nodeX = Int(node.attribute(forName: "x")?.stringValue ?? ""),
-                       let nodeZ = Int(node.attribute(forName: "z")?.stringValue ?? "") {
-                        var gameCell = GameCell()
-                        gameCell.x = nodeX
-                        gameCell.y = nodeZ
-                        
-                        if let terrainDef = node.elements(forName: "terrain").first?.attribute(forName: "def")?.stringValue {
-                            gameCell.terrain = GameObject.init(def: terrainDef, stuffDef: nil, artDesc: nil)
-                        }
-                        
-                        for item in node.elements(forName: "item") {
-                            if let itemDef = item.attribute(forName: "def")?.stringValue {
-                                let stuffDef = item.attribute(forName: "stuffDef")?.stringValue
-                                gameCell.objects.append(GameObject(def: itemDef, stuffDef: stuffDef, artDesc: ""))
-                            }
-                        }
-                        cells.append(gameCell)
+    func json(_ req: Request) async throws -> [[GameCell]] {
+        guard let mapId = req.parameters.get("id", as: Int.self) else {
+            throw RealRuinsError.invalidParameters("No ID provided")
+        }
+
+        guard let gameMap = try await GameMap.find(mapId, on: req.db) else {
+            throw RealRuinsError.invalidParameters("Map not found")
+        }
+
+        let fullName = "https://realruinsv2.sfo2.digitaloceanspaces.com/\(gameMap.nameInBucket).bp"
+        let response = try await req.client.get(URI(string: fullName))
+
+        guard let bodyBuffer = response.body else {
+            throw RealRuinsError.noData()
+        }
+        let blueprintData = Data(buffer: bodyBuffer)
+
+        guard let unzipped = try? blueprintData.gunzipped() else {
+            throw RealRuinsError.malformedBlueprintGZIP()
+        }
+
+        guard let blueprint = try? XMLDocument(data: unzipped, options: []),
+              let root = blueprint.rootElement() else {
+            throw RealRuinsError.malformedBlueprintXML("Can't init XML")
+        }
+
+        guard let blueprintWidth = Int(root.attribute(forName: "width")?.stringValue ?? ""),
+              let blueprintHeight = Int(root.attribute(forName: "height")?.stringValue ?? "") else {
+            throw RealRuinsError.malformedBlueprintXML("No height or width provided")
+        }
+
+        var cells: [[GameCell]] = Array(repeating: Array(repeating: GameCell(), count: blueprintWidth), count: blueprintHeight)
+
+        for node in root.elements(forName: "cell") {
+            if let nodeX = Int(node.attribute(forName: "x")?.stringValue ?? ""),
+               let nodeZ = Int(node.attribute(forName: "z")?.stringValue ?? "") {
+                var gameCell = cells[nodeZ][nodeX]
+                if let terrainDef = node.elements(forName: "terrain").first?.attribute(forName: "def")?.stringValue {
+                    gameCell.terrain = GameObject(def: terrainDef, stuffDef: nil, artDesc: nil)
+                }
+                for item in node.elements(forName: "item") {
+                    if let itemDef = item.attribute(forName: "def")?.stringValue {
+                        let stuffDef = item.attribute(forName: "stuffDef")?.stringValue
+                        gameCell.objects.append(GameObject(def: itemDef, stuffDef: stuffDef, artDesc: ""))
                     }
                 }
-                return cells
-            })
+                cells[nodeZ][nodeX] = gameCell
+            }
+        }
+        return cells
     }
-    
+
+    func json2(_ req: Request) async throws -> [GameCell] {
+        guard let mapId = req.parameters.get("id", as: Int.self) else {
+            throw RealRuinsError.invalidParameters("No ID provided")
+        }
+
+        guard let gameMap = try await GameMap.find(mapId, on: req.db) else {
+            throw RealRuinsError.invalidParameters("Map not found")
+        }
+
+        let fullName = "https://realruinsv2.sfo2.digitaloceanspaces.com/\(gameMap.nameInBucket).bp"
+        let response = try await req.client.get(URI(string: fullName))
+
+        guard let bodyBuffer = response.body else {
+            throw RealRuinsError.noData()
+        }
+        let blueprintData = Data(buffer: bodyBuffer)
+
+        guard let unzipped = try? blueprintData.gunzipped() else {
+            throw RealRuinsError.malformedBlueprintGZIP()
+        }
+
+        guard let blueprint = try? XMLDocument(data: unzipped, options: []),
+              let root = blueprint.rootElement() else {
+            throw RealRuinsError.malformedBlueprintXML("Can't init XML")
+        }
+
+        var cells: [GameCell] = []
+
+        for node in root.elements(forName: "cell") {
+            if let nodeX = Int(node.attribute(forName: "x")?.stringValue ?? ""),
+               let nodeZ = Int(node.attribute(forName: "z")?.stringValue ?? "") {
+                var gameCell = GameCell()
+                gameCell.x = nodeX
+                gameCell.y = nodeZ
+
+                if let terrainDef = node.elements(forName: "terrain").first?.attribute(forName: "def")?.stringValue {
+                    gameCell.terrain = GameObject(def: terrainDef, stuffDef: nil, artDesc: nil)
+                }
+                for item in node.elements(forName: "item") {
+                    if let itemDef = item.attribute(forName: "def")?.stringValue {
+                        let stuffDef = item.attribute(forName: "stuffDef")?.stringValue
+                        gameCell.objects.append(GameObject(def: itemDef, stuffDef: stuffDef, artDesc: ""))
+                    }
+                }
+                cells.append(gameCell)
+            }
+        }
+        return cells
+    }
+}
+
+// MARK: - SQL helper
+extension Request {
+    var sqlDb: SQLDatabase {
+        guard let sql = db as? SQLDatabase else {
+            fatalError("Database does not support SQLKit")
+        }
+        return sql
+    }
 }
