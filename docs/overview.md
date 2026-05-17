@@ -53,9 +53,8 @@ rr-server/
 │   └── tablebase.leaf
 ├── Tests/AppTests/               # Minimal test stub (no real tests)
 ├── Package.swift                 # SPM manifest (swift-tools-version:5.5)
-├── .circleci/config.yml          # CI: compile + swift test on Swift 4.1 image (outdated)
-├── cloud.yml                     # Vapor Cloud deployment config (service shut down)
-└── web.Dockerfile                # Docker build (Swift 5.9 builder, Ubuntu 22.04 runtime)
+├── Dockerfile                    # Docker build (Swift 5.9 builder, Ubuntu 22.04 runtime)
+└── .github/workflows/ci.yml     # GitHub Actions: build/test + Docker push to GHCR
 ```
 
 ## Request Flow
@@ -68,8 +67,9 @@ rr-server/
 
 ## CI / Build
 
-- CircleCI (`.circleci/config.yml`) was originally configured for Swift 4.1. The CI config is now outdated and should be updated to use a Swift 5.9+ image.
-- No deployment step in CI — deployment is manual via Docker.
+GitHub Actions (`.github/workflows/ci.yml`) runs on every push and pull request to `master`:
+1. **`test` job** — `swift build` + `swift test` inside a `swift:5.9` container.
+2. **`docker` job** — builds the Docker image and pushes it to GHCR as `ghcr.io/woolstrand/realruins-server:latest` (push-to-master only, after `test` passes).
 
 ## Running Locally
 

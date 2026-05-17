@@ -1,6 +1,9 @@
 .git
 .build
+.github
 DerivedData
 Package.resolved
 *.xcodeproj
-
+docs
+*.md
+cloud.yml
