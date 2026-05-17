@@ -1,68 +1,52 @@
-import FluentMySQL
+import Fluent
+import FluentMySQLDriver
 import Vapor
 import Leaf
-import Storage
 
 /// Called before your application initializes.
-public func configure(_ config: inout Config, _ env: inout Environment, _ services: inout Services) throws {
+public func configure(_ app: Application) throws {
 
-    /// Register routes to the router
-    let router = EngineRouter.default()
-    try routes(router)
-    services.register(router, as: Router.self)
+    // MARK: - Leaf templating
+    app.views.use(.leaf)
+    app.leaf.cache.isEnabled = app.environment.isRelease
 
-    /// Leaf provider for web functionality
-    try services.register(LeafProvider())
+    // MARK: - Middleware (order = outermost first)
+    let corsConfig = CORSMiddleware.Configuration(
+        allowedOrigin: .all,
+        allowedMethods: [.GET, .POST, .PUT, .OPTIONS, .DELETE, .PATCH],
+        allowedHeaders: [.accept, .authorization, .contentType, .origin, .xRequestedWith]
+    )
+    app.middleware.use(CORSMiddleware(configuration: corsConfig))
+    app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
+    app.middleware.use(ErrorMiddleware.default(environment: app.environment))
 
-    let corsConfig = CORSMiddleware.Configuration.init(allowedOrigin: .all, allowedMethods: [.GET, .POST, .PUT, .OPTIONS, .DELETE, .PATCH], allowedHeaders: [.accept, .authorization, .contentType, .origin, .xRequestedWith])
-    let corsMiddleware = CORSMiddleware(configuration: corsConfig)
-    
-    let loggerMiddleware = Logger()
-    loggerMiddleware.initialize()
+    let fileLogger = FileLogger()
+    fileLogger.initialize()
+    app.middleware.use(fileLogger)
 
-    /// Register middleware
-    var middlewares = MiddlewareConfig() // Create _empty_ middleware config
-    middlewares.use(corsMiddleware)
-    middlewares.use(FileMiddleware.self) // Serves files from `Public/` directory
-    middlewares.use(ErrorMiddleware.self) // Catches errors and converts to HTTP response
-    middlewares.use(loggerMiddleware)
-    services.register(middlewares)
+    // MARK: - MySQL database
+    // No migrations are run so existing data is preserved.
+    app.databases.use(
+        .mysql(
+            hostname: "localhost",
+            port: 3306,
+            username: "realruins",
+            password: DatabasePassword,
+            database: "realruins",
+            tlsConfiguration: nil
+        ),
+        as: .mysql
+    )
 
-
-    // Configure Leaf
-    config.prefer(LeafRenderer.self, for: ViewRenderer.self)
-
-    // Configure a MySQL database
-
-    try services.register(FluentMySQLProvider())
-
-    let mysql = MySQLDatabase(config: MySQLDatabaseConfig(hostname: "localhost", port: 3306, username: "realruins", password: DatabasePassword, database: "realruins", capabilities: MySQLCapabilities.default, characterSet: MySQLCharacterSet.utf8_general_ci, transport: MySQLTransportConfig.cleartext))
-    
-
-    /// Register the configured SQLite database to the database config.
-    var databases = DatabasesConfig()
-    databases.add(database: mysql, as: .mysql)
-    services.register(databases)
-    
-    GameMap.defaultDatabase = .mysql
-    Vote.defaultDatabase = .mysql
-
-    /// Register S3 service
-    let driver = try S3Driver(
-        bucket: "realruinsv2",
-        host: "sfo2.digitaloceanspaces.com",
+    // MARK: - S3 / DigitalOcean Spaces
+    app.s3Uploader = S3Uploader(
         accessKey: S3ApiKey,
         secretKey: S3ApiSecret,
-        region: "sfo2",
-        pathTemplate: "/#file"
+        bucket: "realruinsv2",
+        host: "sfo2.digitaloceanspaces.com",
+        region: "sfo2"
     )
-    services.register(driver, as: NetworkDriver.self)
-    
-    services.register(MapsService.self)
-    
-    /// Configure migrations
- //   var migrations = MigrationConfig()
-//    migrations.add(model: Todo.self, database: .sqlite)
- //   services.register(migrations)
 
+    // MARK: - Routes
+    try routes(app)
 }

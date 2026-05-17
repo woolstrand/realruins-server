@@ -48,27 +48,15 @@ All origins, all methods (`GET POST PUT DELETE PATCH OPTIONS`), standard headers
 
 ## Deployment Options
 
-### 1. Vapor Cloud (`cloud.yml`)
-
-```yaml
-type: "vapor"
-swift_version: "4.1.0"
-run_parameters: "serve --port 8080 --hostname 0.0.0.0"
-```
-
-This is the original Vapor Cloud deployment manifest. **Vapor Cloud shut down in 2020** and is no longer usable.
-
-### 2. Docker (`web.Dockerfile`)
+### 1. Docker (`Dockerfile`)
 
 Two-stage build:
-- **Builder stage**: `swift:4.2` — compiles the release binary
-- **Runtime stage**: `ubuntu:16.04` — runs the binary
-
-> ⚠️ `ubuntu:16.04` reached end-of-life in April 2021 and no longer receives security patches.
+- **Builder stage**: `swift:5.9-focal` — compiles the release binary
+- **Runtime stage**: `ubuntu:22.04` — runs the binary
 
 ```bash
 # Build image
-docker build -f web.Dockerfile -t rr-server .
+docker build -t rr-server .
 
 # Run (example)
 docker run -p 80:80 \
@@ -78,7 +66,7 @@ docker run -p 80:80 \
 
 The container listens on port 80 and expects MySQL to be reachable at `localhost:3306` from within the container (or wherever the hardcoded hostname resolves). For Docker deployments the DB host must be changed from `localhost` to the actual container/host name — this currently requires a code change.
 
-### 3. Direct `swift run`
+### 2. Direct `swift run`
 
 ```bash
 swift build -c release
@@ -87,16 +75,20 @@ swift build -c release
 
 ---
 
-## CI (CircleCI)
+## CI/CD (GitHub Actions)
 
-File: `.circleci/config.yml`
+File: `.github/workflows/ci.yml`
 
-| Job | Image | Steps |
-|-----|-------|-------|
-| `linux` | `swift:4.1` | `swift build` + `swift test` |
-| `linux-release` | `swift:4.1` | `swift build -c release` |
+| Job | Trigger | Steps |
+|-----|---------|-------|
+| `test` | every push / PR to `master` | `swift build` + `swift test` (inside `swift:5.9` container) |
+| `docker` | push to `master` only (after `test` passes) | Build Docker image and push to GHCR as `ghcr.io/<owner>/realruins-server:latest` |
 
-Triggered on every commit and nightly on `master`. No deployment step. No Docker image push.
+The Docker image is published to the GitHub Container Registry (GHCR). Pull it with:
+
+```bash
+docker pull ghcr.io/woolstrand/realruins-server:latest
+```
 
 ---
 

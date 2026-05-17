@@ -1,42 +1,40 @@
 import Vapor
 
 /// Register your application's routes here.
-public func routes(_ router: Router) throws {
+public func routes(_ app: Application) throws {
     // Basic "It works" example
-    router.get { req in
+    app.get { req async in
         return "It works!"
     }
-    
+
     // Basic "Hello, world!" example
-    router.get("hello") { req in
+    app.get("hello") { req async in
         return "Hello, world!"
     }
-    
-    /// API part
 
+    /// API part
     let gameMapController = MapsController()
     let gameMapViewController = MapsViewController()
-    router.get("maps", use: gameMapController.index)
-    router.get("maps", "random", use: gameMapController.random)
-    router.get("maps", "seed", String.parameter, use: gameMapController.withSeed)
-    router.get("maps", "topseeds", use: gameMapController.topSeeds)
-    router.post("maps", use: gameMapController.create)
 
-    router.get("maps", "json", Int.parameter, use: gameMapController.json)
-    router.get("maps", "json2", Int.parameter, use: gameMapController.json2)
+    app.get("maps", use: gameMapController.index)
+    app.get("maps", "random", use: gameMapController.random)
+    app.get("maps", "seed", ":seed", use: gameMapController.withSeed)
+    app.get("maps", "topseeds", use: gameMapController.topSeeds)
+    app.post("maps", use: gameMapController.create)
 
-    
-    router.post("maps", "vote", "remove", Int.parameter, use: gameMapController.voteForRemoval)
-    router.post("maps", "vote", "promote", Int.parameter, use: gameMapController.voteForPromotion)
+    app.get("maps", "json", ":id", use: gameMapController.json)
+    app.get("maps", "json2", ":id", use: gameMapController.json2)
+
+    app.post("maps", "vote", "remove", ":id", use: gameMapController.voteForRemoval)
+    app.post("maps", "vote", "promote", ":id", use: gameMapController.voteForPromotion)
 
     /// Web part
-    router.get("view", use:  gameMapViewController.index)
-    router.get("view", "stats", use:  gameMapViewController.viewStats)
-    router.get("view", "map", Int.parameter, use: gameMapViewController.viewMap)
-    router.get("view", "maps", "random", use: gameMapViewController.viewRandomMap)
-    router.get("view", "maps", "topseeds", use:  gameMapViewController.topSeeds)
+    app.get("view", use: gameMapViewController.index)
+    app.get("view", "stats", use: gameMapViewController.viewStats)
+    app.get("view", "map", ":id", use: gameMapViewController.viewMap)
+    app.get("view", "maps", "random", use: gameMapViewController.viewRandomMap)
+    app.get("view", "maps", "topseeds", use: gameMapViewController.topSeeds)
 
-    router.get("view", "maps", "seed", String.parameter, use: gameMapViewController.withSeed)
-    router.get("view", "distribution", "seed", String.parameter, use: gameMapViewController.mapsDistribution)
-
+    app.get("view", "maps", "seed", ":seed", use: gameMapViewController.withSeed)
+    app.get("view", "distribution", "seed", ":seed", use: gameMapViewController.mapsDistribution)
 }

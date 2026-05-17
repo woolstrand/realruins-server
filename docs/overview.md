@@ -8,15 +8,15 @@ Backend server for the **Real Ruins** mod for the game *RimWorld*. The mod captu
 
 | Component | Technology | Version |
 |-----------|-----------|---------|
-| Language | Swift | 4.1 / 4.2 |
-| Web framework | Vapor | 3.x |
-| ORM | Fluent-MySQL | 3.x |
+| Language | Swift | 5.5+ (built with Swift 6.x) |
+| Web framework | Vapor | 4.x |
+| ORM | Fluent + FluentMySQLDriver | 4.x |
 | Database | MySQL | (external, localhost:3306) |
 | Object storage | DigitalOcean Spaces (S3-compatible) | sfo2 region |
-| S3 client | dieworld/storage | 1.0.0-beta |
-| Template engine | Leaf | 3.x |
-| Compression | GzipSwift | 4.x |
-| TLS | swift-nio-ssl | 1.3.2 (pinned) |
+| S3 client | Custom AWS Sig V4 uploader | (in-repo, uses swift-crypto) |
+| Template engine | Leaf | 4.x |
+| Compression | GzipSwift | 5.x |
+| XML parsing | FoundationXML | (Swift stdlib, via swift-corelibs-foundation) |
 
 ## Repository Structure
 
@@ -52,10 +52,9 @@ rr-server/
 │   ├── stats.leaf
 │   └── tablebase.leaf
 ├── Tests/AppTests/               # Minimal test stub (no real tests)
-├── Package.swift                 # SPM manifest (swift-tools-version:4.0)
-├── .circleci/config.yml          # CI: compile + swift test on Swift 4.1 image
-├── cloud.yml                     # Vapor Cloud deployment config
-└── web.Dockerfile                # Docker build (Swift 4.2 builder, Ubuntu 16.04 runtime)
+├── Package.swift                 # SPM manifest (swift-tools-version:5.5)
+├── Dockerfile                    # Docker build (Swift 5.9 builder, Ubuntu 22.04 runtime)
+└── .github/workflows/ci.yml     # GitHub Actions: build/test + Docker push to GHCR
 ```
 
 ## Request Flow
@@ -68,9 +67,9 @@ rr-server/
 
 ## CI / Build
 
-- CircleCI (`.circleci/config.yml`) runs `swift build` and `swift test` on every commit using a Swift 4.1 Docker image.
-- A nightly build also runs against `master`.
-- No deployment step in CI — deployment is manual or via Vapor Cloud (`cloud.yml`).
+GitHub Actions (`.github/workflows/ci.yml`) runs on every push and pull request to `master`:
+1. **`test` job** — `swift build` + `swift test` inside a `swift:5.9` container.
+2. **`docker` job** — builds the Docker image and pushes it to GHCR as `ghcr.io/woolstrand/realruins-server:latest` (push-to-master only, after `test` passes).
 
 ## Running Locally
 
