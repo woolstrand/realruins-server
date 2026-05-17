@@ -12,7 +12,7 @@
 
 ## Configuration & Secrets
 
-All credentials are currently **hardcoded** in `Sources/App/secureconstants.swift`:
+Credentials are defined in `Sources/App/secureconstants.swift`:
 
 ```swift
 let DatabasePassword = "123456"
@@ -20,9 +20,11 @@ let S3ApiKey         = "123456"
 let S3ApiSecret      = "123456"
 ```
 
-> ⚠️ **Security issue**: secrets are committed to source control. See `docs/suggestions.md` for remediation advice.
+The values committed to the repository are **dummy placeholders**. They are replaced with real credentials manually at deployment time. This file is not intended to hold production secrets.
 
-No environment variable or config-file based configuration exists. Any credential change requires a code rebuild.
+> ⚠️ The manual substitution step is error-prone and prevents automated multi-environment deployments. See `docs/suggestions.md` (Section 2 — "Secrets not externalised") for the recommended fix.
+
+No environment variable or config-file based configuration exists. Any credential change requires editing this file and rebuilding.
 
 ---
 

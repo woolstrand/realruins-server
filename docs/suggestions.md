@@ -46,7 +46,7 @@ Updating is **technically feasible** but represents a moderate-to-significant ef
 
 ### Recommendation
 
-Updating is **reasonable and worthwhile** if the service is actively used by the RimWorld mod. The main motivation is security (EOL OS, unmaintained library, hardcoded secrets) rather than feature availability. A staged approach is recommended: start with Docker/CI base images and secrets externalisation (low risk, high value), then tackle the Vapor 4 migration.
+Updating is **reasonable and worthwhile** if the service is actively used by the RimWorld mod. The main motivation is security (EOL OS, unmaintained library) and operational reliability (manual deployment, no automation) rather than feature availability. A staged approach is recommended: start with Docker/CI base images and secrets externalisation (low risk, high value), then tackle the Vapor 4 migration.
 
 ---
 
@@ -54,10 +54,7 @@ Updating is **reasonable and worthwhile** if the service is actively used by the
 
 ### Critical
 
-#### 🔴 Secrets committed to source control
-`Sources/App/secureconstants.swift` contains the database password and S3 API keys in plaintext. Anyone with repository access has full access to the database and object storage bucket.
-
-**Fix**: Replace with environment variable reads (e.g., `Environment.get("DB_PASSWORD") ?? ""`) and document required variables in `docs/infrastructure.md`. Rotate the current credentials.
+#### 🔴 SQL injection vulnerabilities
 
 #### 🔴 SQL injection vulnerabilities
 Two raw SQL queries build strings via Swift string interpolation without any sanitisation:
@@ -125,6 +122,11 @@ The map view template uses `$.ajax({ async: false, … })`, which freezes the br
 `MapsController.json` and `json2` hardcode `https://realruinsv2.sfo2.digitaloceanspaces.com` to build the blueprint URL, duplicating the S3 configuration.
 
 **Fix**: Derive the URL from the same S3 config constants used to initialise the driver.
+
+#### 🟡 Secrets not externalised (deployment process)
+`Sources/App/secureconstants.swift` contains placeholder values (`"123456"`) for the database password and S3 API keys. These are intentional dummy values that are **replaced with real credentials during manual deployment** — they do not represent leaked secrets. However, this manual substitution step is error-prone and blocks multi-environment automation.
+
+**Fix**: Replace the hardcoded constants with environment variable reads (e.g., `Environment.get("DB_PASSWORD") ?? ""`). This is a prerequisite for the staging/production automation described in Section 3, and can be done independently of the Vapor version upgrade.
 
 ### Low
 
