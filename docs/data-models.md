@@ -1,0 +1,98 @@
+# RealRuins Server — Data Models
+
+## Database: MySQL
+
+Database name: `realruins`  
+ORM: Fluent-MySQL 3 (`MySQLModel`)  
+No formal migration config is active (the `MigrationConfig` block in `configure.swift` is commented out — tables must be created manually).
+
+---
+
+## GameMap
+
+**Table name**: `GameMap` (Fluent default: class name)
+
+| Column | Swift type | MySQL type | Notes |
+|--------|-----------|------------|-------|
+| `id` | `Int?` | INT AUTO_INCREMENT | Primary key |
+| `seed` | `String` | VARCHAR | World seed string from RimWorld |
+| `tileId` | `Int` | INT | Tile index on the planet map |
+| `gameId` | `UInt64` | BIGINT UNSIGNED | Unique per save file |
+| `coverage` | `Int` | INT | Ruin coverage % × 100 (e.g., 50 = 50%) |
+| `width` | `Int` | INT | Blueprint width in cells |
+| `height` | `Int` | INT | Blueprint height in cells |
+| `originX` | `Int` | INT | X coordinate of the tile's origin |
+| `originZ` | `Int` | INT | Z coordinate of the tile's origin |
+| `mapSize` | `Int` | INT | RimWorld map dimension (e.g., 250 for 250×250) |
+| `updatedAt` | `Date` | DATETIME | Last update timestamp |
+| `nameInBucket` | `String` | VARCHAR | UUID filename in DigitalOcean Spaces (no extension) |
+| `biome` | `String` | VARCHAR | RimWorld biome def name (e.g., `TemperateForest`) |
+| `version` | `String` | VARCHAR | Blueprint format version from the XML |
+
+**Uniqueness constraint**: `(gameId, tileId)` — enforced in application logic (the `create` endpoint queries for an existing record before inserting). There is no database-level unique index defined via migrations.
+
+**Blueprint file URL pattern**: `https://realruinsv2.sfo2.digitaloceanspaces.com/<nameInBucket>.bp`
+
+---
+
+## Vote
+
+**Table name**: `Vote`
+
+| Column | Swift type | MySQL type | Notes |
+|--------|-----------|------------|-------|
+| `id` | `Int?` | INT AUTO_INCREMENT | Primary key |
+| `mapId` | `Int` | INT | References `GameMap.id` (no FK constraint) |
+| `ip` | `String` | VARCHAR | Voter's IP address |
+| `voteType` | `Int` | INT | `100` = promote, `500` = remove |
+
+Deduplication: application code checks for an existing `(mapId, ip, voteType)` triple before inserting. No database-level unique index.
+
+---
+
+## Blueprint File Format
+
+Files stored in Spaces are **gzip-compressed XML**. After decompression the structure is:
+
+```xml
+<blueprint width="250" height="250" biomeDef="TemperateForest"
+           x="10" z="5" mapSize="250" version="1.3">
+  <world seed="SomeSeed" tile="1234" gameId="9876543210" percentage="0.5" />
+  <cell x="0" z="0">
+    <terrain def="Gravel" />
+    <item def="Wall" stuffDef="Steel" />
+    <item def="Door" />
+  </cell>
+  <!-- ... more cells ... -->
+</blueprint>
+```
+
+**Key attributes on `<blueprint>`**:
+- `width`, `height` — dimensions in cells
+- `biomeDef` — biome identifier
+- `x`, `z` — tile origin coordinates
+- `mapSize` — RimWorld map edge length
+- `version` — format version (defaults to `"1.0"` if absent)
+
+**`<world>` child element**:
+- `seed` — world seed string
+- `tile` — tile index
+- `gameId` — unique save-file identifier
+- `percentage` — coverage as a float (0.0–1.0); stored in DB multiplied by 100
+
+**`<cell>` child elements**:
+- `x`, `z` — cell coordinates within the blueprint
+- `<terrain def="…" />` — terrain type (optional)
+- `<item def="…" stuffDef="…" />` — placed objects (0 or more per cell)
+
+---
+
+## Object Storage
+
+Provider: DigitalOcean Spaces  
+Bucket: `realruinsv2`  
+Region: `sfo2`  
+Host: `sfo2.digitaloceanspaces.com`  
+Public CDN URL: `https://realruinsv2.sfo2.digitaloceanspaces.com/<nameInBucket>.bp`
+
+Files are uploaded via the `dieworld/storage` S3 driver. The S3 keys are read from `Sources/App/secureconstants.swift` at compile time.
