@@ -26,30 +26,41 @@ public func configure(_ app: Application) throws {
 
     // MARK: - MySQL database
     // No migrations are run so existing data is preserved.
+    let dbHost     = ProcessInfo.processInfo.environment["DATABASE_HOST"]     ?? "localhost"
+    let dbPort     = Int(ProcessInfo.processInfo.environment["DATABASE_PORT"] ?? "3306") ?? 3306
+    let dbName     = ProcessInfo.processInfo.environment["DATABASE_NAME"]     ?? "realruins"
+    let dbUser     = ProcessInfo.processInfo.environment["DATABASE_USERNAME"] ?? "realruins"
+    let dbPassword = ProcessInfo.processInfo.environment["DATABASE_PASSWORD"] ?? "123456"
+
     app.databases.use(
         .mysql(
-            hostname: "localhost",
-            port: 3306,
-            username: "realruins",
-            password: DatabasePassword,
-            database: "realruins",
+            hostname: dbHost,
+            port: dbPort,
+            username: dbUser,
+            password: dbPassword,
+            database: dbName,
             tlsConfiguration: nil
         ),
         as: .mysql
     )
 
     // MARK: - S3 / DigitalOcean Spaces
+    let s3AccessKey = ProcessInfo.processInfo.environment["S3_API_KEY"]    ?? "123456"
+    let s3SecretKey = ProcessInfo.processInfo.environment["S3_API_SECRET"] ?? "123456"
+    let s3Bucket    = ProcessInfo.processInfo.environment["S3_BUCKET"]     ?? "realruinsv2"
+    let s3Region    = ProcessInfo.processInfo.environment["S3_REGION"]     ?? "sfo2"
+
     app.s3Uploader = S3Uploader(
-        accessKey: S3ApiKey,
-        secretKey: S3ApiSecret,
-        bucket: "realruinsv2",
-        host: "sfo2.digitaloceanspaces.com",
-        region: "sfo2"
+        accessKey: s3AccessKey,
+        secretKey: s3SecretKey,
+        bucket: s3Bucket,
+        host: "\(s3Region).digitaloceanspaces.com",
+        region: s3Region
     )
 
     // Warn loudly if any credential is still using the placeholder value.
-    if [DatabasePassword, S3ApiKey, S3ApiSecret].contains("123456") {
-        app.logger.warning("One or more credentials are using placeholder values. Set MYSQL_PASSWORD, S3_API_KEY and S3_API_SECRET environment variables before running in production.")
+    if [dbPassword, s3AccessKey, s3SecretKey].contains("123456") {
+        app.logger.warning("One or more credentials are using placeholder values. Set DATABASE_PASSWORD, S3_API_KEY and S3_API_SECRET environment variables before running in production.")
     }
 
     // MARK: - Routes
