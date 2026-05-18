@@ -1,13 +1,17 @@
-name: CI/CD
+name: Staging — Build & Push
 
+# Runs on every push to develop (i.e. after a PR is merged).
+# Builds, tests, then publishes to GHCR with the :staging and
+# :staging-<sha> tags.
+#
+# Staging image reference (for docker-compose):
+#   ghcr.io/woolstrand/realruins-server:staging
 on:
   push:
-    branches: [master]
-  pull_request:
-    branches: [master]
+    branches: [develop]
 
 jobs:
-  # ── Build & test ──────────────────────────────────────────────────────────
+  # ── Build & test ─────────────────────────────────────────────────────────────
   test:
     name: Build & Test
     runs-on: ubuntu-latest
@@ -23,12 +27,10 @@ jobs:
       - name: Test
         run: swift test
 
-  # ── Docker build & push ───────────────────────────────────────────────────
+  # ── Docker build & push ───────────────────────────────────────────────────────
   docker:
-    name: Docker Build & Push
+    name: Docker Build & Push (staging)
     needs: test
-    # Only push on direct pushes to master (not on pull requests)
-    if: github.event_name == 'push'
     runs-on: ubuntu-latest
 
     permissions:
@@ -48,14 +50,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push Docker image
+      - name: Build and push staging image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}:latest
-            ghcr.io/${{ github.repository }}:${{ github.sha }}
+            ghcr.io/${{ github.repository }}:staging
+            ghcr.io/${{ github.repository }}:staging-${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

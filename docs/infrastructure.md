@@ -101,21 +101,71 @@ swift build -c release
 
 ---
 
+## Branching Strategy
+
+| Branch | Purpose |
+|--------|---------|
+| `develop` | Integration branch. All feature/fix PRs target here. |
+| `master` | Stable production branch. Only receives merges from `develop`. |
+
+**Setting the default branch to `develop`** (one-time, done in GitHub):  
+`Settings → General → Default branch → change to develop`.
+
+---
+
 ## CI/CD (GitHub Actions)
 
-File: `.github/workflows/ci.yml`
+Three workflow files replace the original `ci.yml`:
 
-| Job | Trigger | Steps |
-|-----|---------|-------|
-| `test` | every push / PR to `master` | `swift build` + `swift test` (inside `swift:5.9` container) |
-| `docker` | push to `master` only (after `test` passes) | Build Docker image and push to GHCR as `ghcr.io/<owner>/realruins-server:latest` |
+| File | Trigger | Jobs |
+|------|---------|------|
+| `.github/workflows/pr.yml` | PR opened/updated against `develop` (or `master`) | `Build & Test` — read-only, no secrets required |
+| `.github/workflows/staging.yml` | Push to `develop` (PR merged) | `Build & Test`, then `Docker Build & Push` → staging image |
+| `.github/workflows/prod.yml` | Push to `master` | `Docker Build & Push` → prod image (retags staging image if available, otherwise rebuilds from source using BuildKit cache) |
 
-The Docker image is published to the GitHub Container Registry (GHCR). Pull it with:
+### PR workflow & fork approvals
 
-```bash
-docker pull ghcr.io/woolstrand/realruins-server:latest
+For same-repo branch PRs the workflow runs automatically with no approval needed.  
+For **fork** PRs, GitHub requires manual approval by default. To allow them to run without
+confirmation go to:  
+`Settings → Actions → General → Fork pull request workflows from outside collaborators`  
+→ select **"Run workflows from fork pull requests"**.
+
+### GHCR image references
+
+| Environment | Image | Notes |
+|-------------|-------|-------|
+| **Staging** | `ghcr.io/woolstrand/realruins-server:staging` | Updated on every merge to `develop` |
+| **Staging (pinned)** | `ghcr.io/woolstrand/realruins-server:staging-<sha>` | Immutable per-commit tag |
+| **Production** | `ghcr.io/woolstrand/realruins-server:latest` | Updated on every merge to `master` |
+| **Production (pinned)** | `ghcr.io/woolstrand/realruins-server:<sha>` | Immutable per-commit tag |
+
+Use the pinned tags in production `docker-compose.yml` files for reproducible deployments.
+Use the floating tags (`staging` / `latest`) for convenience during development.
+
+Example `docker-compose.yml` snippet:
+
+```yaml
+services:
+  app:
+    # Staging
+    image: ghcr.io/woolstrand/realruins-server:staging
+    # Production
+    # image: ghcr.io/woolstrand/realruins-server:latest
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_HOST: db
+      DATABASE_PORT: 3306
+      DATABASE_NAME: realruins
+      DATABASE_USERNAME: realruins
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
+      S3_API_KEY: ${S3_API_KEY}
+      S3_API_SECRET: ${S3_API_SECRET}
+      S3_BUCKET: realruinsv2
+      S3_REGION: sfo2
 ```
 
 ---
 
-See `docs/suggestions.md` for a staging/production deployment plan.
+See `docs/suggestions.md` for further deployment recommendations.
