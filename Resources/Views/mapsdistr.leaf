@@ -1,35 +1,35 @@
-#set("content") {
+#extend("tablebase"):
+#export("content"):
 
 <div class="row">
     <div class="col-xs-1 border">
         &nbsp;
     </div>
 
-    #for(caption in hcaptions) {
+    #for(caption in hcaptions):
         <div class="col-xs-1 border">
             #(caption)
         </div>
-    }
+    #endfor
 </div>
 <br />
 
-#for(row in rows) {
+#for(row in rows):
     <div class="row">
 
         <div class="col-xs-1 border">
             #(row.caption)
         </div>
 
-        #for(col in row.data) {
+        #for(col in row.data):
             <div class="col-xs-1 border">
                 #(col)
             </div>
-        }
+        #endfor
     </div>
     <br />
-}
+#endfor
 
-
-}
-#embed("tablebase")
+#endexport
+#endextend
 
