@@ -2,7 +2,14 @@
 
 ## Template Engine
 
-**Leaf 3** (Vapor's server-side template engine). Templates live in `Resources/Views/`.
+**Leaf 4** (Vapor's server-side template engine, `vapor/leaf` 4.x / `vapor/leaf-kit` 1.x). Templates live in `Resources/Views/`.
+
+Leaf 4 syntax notes:
+- Block bodies use a **colon** (`:`) indicator, **not** curly braces `{}`.
+- Control-flow tags: `#if(cond):` … `#else:` … `#endif`, `#for(x in xs):` … `#endfor`.
+- Template inheritance: child templates use `#extend("base"):` … `#endextend` with `#export("block"):` … `#endexport` inside; the base template pulls blocks in with `#import("block")`.
+- Context variables accessed directly with `#(varName)`.
+- Built-in function tags: `count(array)`, `lowercased(str)`, `uppercased(str)`, `date(ts)`, etc.
 
 ---
 
@@ -23,7 +30,7 @@ Uses **Bootstrap 3.3.7** (loaded from MaxCDN).
 
 ### `tablebase.leaf`
 
-Base layout for list pages. Sets the page `<title>` via `#get(title)` and injects content from `#set("content") { … }` in child templates.
+Base layout for list pages. Renders `#(title)` for the page title and `#import("content")` for the main body. Child templates extend it with `#extend("tablebase"):` and export their content via `#export("content"):` … `#endexport`.
 
 Uses **Bootstrap 3.3.7**.
 
@@ -87,7 +94,7 @@ Context type: `DistributionContext { hcaptions, rows [DistributionRow { caption,
 
 ### `stats.leaf`
 
-Extends `tablebase.leaf`. Rendered by `GET /view/stats`.
+Standalone HTML (no `tablebase.leaf`). Rendered by `GET /view/stats`.
 
 Shows total number of maps stored.
 

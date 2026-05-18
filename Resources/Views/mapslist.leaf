@@ -1,4 +1,5 @@
-#set("content") {
+#extend("tablebase"):
+#export("content"):
 
 <div class="row">
 <div class="col-xs-1">
@@ -30,9 +31,9 @@
 </div>
 </div>
 
-#if(count(mapsList) > 0) {
+#if(count(mapsList) > 0):
 
-#for(gameMap in mapsList) {
+#for(gameMap in mapsList):
 <div class="row">
 <div class="col-xs-1">
 #(gameMap.id)
@@ -59,30 +60,29 @@
 #(gameMap.biome)
 </div>
 <div class="col-xs-1">
-<a href = "/view/map/#(gameMap.id)"> View map </a>
+<a href="/view/map/#(gameMap.id)"> View map </a>
 </div>
-
 </div>
-}
+#endfor
 <br />
-<div class=row>
-<div class = "col-xs-6" align=left>
-#if(offset > 0) {
-    <a href = '/view/maps/seed/#(seed)?limit=50&offset=#(offset - 50)'> Prev page </a>
-}
+<div class="row">
+<div class="col-xs-6" align="left">
+#if(offset > 0):
+<a href='/view/maps/seed/#(seed)?limit=50&offset=#(offset - 50)'> Prev page </a>
+#endif
 </div>
-<div class = "col-xs-6" align=right>
-<a href = '/view/maps/seed/#(seed)?limit=50&offset=#(offset + 50)'> Next page </a>
+<div class="col-xs-6" align="right">
+<a href='/view/maps/seed/#(seed)?limit=50&offset=#(offset + 50)'> Next page </a>
 </div>
 </div>
 <br />
 
-} else {
-<div class="col-xs-12" align = center>
-    No maps found
+#else:
+<div class="col-xs-12" align="center">
+No maps found
 </div>
-}
+#endif
 
+#endexport
+#endextend
 
-}
-#embed("tablebase")
