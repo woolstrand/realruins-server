@@ -1,0 +1,82 @@
+name: Prod — Build & Push
+
+# Runs on every push to master (i.e. after develop is merged into master).
+#
+# Strategy: first try to re-tag the existing staging image that was built
+# from the same source (identified by the second parent of the merge commit).
+# If the staging image is not found (e.g. first-ever prod release or direct
+# hotfix push), fall back to a full Docker build using the shared GHA cache,
+# which makes a rebuild nearly instant when layers are already cached from
+# the staging run.
+#
+# Prod image references (for docker-compose):
+#   ghcr.io/woolstrand/realruins-server:latest        (always current prod)
+#   ghcr.io/woolstrand/realruins-server:<sha>         (immutable, this release)
+on:
+  push:
+    branches: [master]
+
+jobs:
+  docker:
+    name: Docker Build & Push (prod)
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2   # need at least the merge commit + parents
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Try to copy the staging image that was built from the same source.
+      # For a normal develop→master merge the second parent is the develop tip
+      # which already has a staging-<sha> image in GHCR.
+      # Uses `docker buildx imagetools create` to retag entirely in the registry
+      # (no image download required).
+      - name: Attempt to retag staging image as prod
+        id: retag
+        continue-on-error: true
+        run: |
+          DEVELOP_SHA=$(git rev-parse HEAD^2 2>/dev/null || true)
+          if [ -z "${DEVELOP_SHA}" ]; then
+            echo "No second parent found (non-merge push); will build."
+            exit 1
+          fi
+          STAGING_IMAGE="ghcr.io/${{ github.repository }}:staging-${DEVELOP_SHA}"
+          echo "Looking for staging image: ${STAGING_IMAGE}"
+          if docker manifest inspect "${STAGING_IMAGE}" > /dev/null 2>&1; then
+            echo "Found staging image — retagging as prod (no download needed)."
+            docker buildx imagetools create \
+              --tag "ghcr.io/${{ github.repository }}:latest" \
+              --tag "ghcr.io/${{ github.repository }}:${{ github.sha }}" \
+              "${STAGING_IMAGE}"
+          else
+            echo "Staging image not found; will build from source."
+            exit 1
+          fi
+
+      # Fallback: build from source (uses BuildKit cache from staging run).
+      - name: Build and push prod image (fallback)
+        if: steps.retag.outcome == 'failure'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ github.repository }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

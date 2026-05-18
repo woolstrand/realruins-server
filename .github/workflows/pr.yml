@@ -1,0 +1,26 @@
+name: PR — Build & Test
+
+# Runs on every pull request targeting the develop branch.
+# No secrets are needed; this job is read-only and safe for fork PRs.
+# To allow fork PRs to run without manual approval go to:
+#   Settings → Actions → General → "Fork pull request workflows from
+#   outside collaborators" → select "Run workflows from fork pull requests".
+on:
+  pull_request:
+    branches: [develop, master]
+
+jobs:
+  test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    container:
+      image: swift:5.9
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: swift build
+
+      - name: Test
+        run: swift test
