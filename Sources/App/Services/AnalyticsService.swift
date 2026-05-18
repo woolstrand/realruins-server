@@ -98,14 +98,14 @@ struct AnalyticsService {
     static func cleanup(on db: Database) async throws {
         guard let sql = db as? SQLDatabase else { return }
 
-        // Upsert daily unique-user counts for all expired dates.
+        // Archive daily unique-user counts for all expired dates.
+        // INSERT IGNORE skips rows that already exist (safe to run more than once).
         try await sql.raw("""
-            INSERT INTO analytics_daily_summary (summary_date, category, unique_count)
+            INSERT IGNORE INTO analytics_daily_summary (summary_date, category, unique_count)
             SELECT event_date, event_type, COUNT(DISTINCT ip)
             FROM analytics_events
             WHERE event_date < DATE_SUB(CURDATE(), INTERVAL 30 DAY)
             GROUP BY event_date, event_type
-            ON DUPLICATE KEY UPDATE unique_count = VALUES(unique_count)
             """).run()
 
         // Remove the now-archived raw events.
