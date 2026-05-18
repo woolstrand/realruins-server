@@ -131,6 +131,11 @@ confirmation go to:
 `Settings → Actions → General → Fork pull request workflows from outside collaborators`  
 → select **"Run workflows from fork pull requests"**.
 
+> **Security note:** enabling automatic fork-PR runs means a malicious contributor
+> could submit a PR that modifies the workflow files and access runner secrets or
+> consume compute. Keep manual approval for untrusted outside contributors unless
+> you trust all potential fork authors.
+
 ### GHCR image references
 
 | Environment | Image | Notes |

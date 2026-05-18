@@ -43,11 +43,13 @@ jobs:
       # Try to copy the staging image that was built from the same source.
       # For a normal develop→master merge the second parent is the develop tip
       # which already has a staging-<sha> image in GHCR.
+      # Uses `docker buildx imagetools create` to retag entirely in the registry
+      # (no image download required).
       - name: Attempt to retag staging image as prod
         id: retag
         continue-on-error: true
         run: |
-          DEVELOP_SHA=$(git log -1 --pretty='%P' | awk '{print $2}')
+          DEVELOP_SHA=$(git rev-parse HEAD^2 2>/dev/null || true)
           if [ -z "${DEVELOP_SHA}" ]; then
             echo "No second parent found (non-merge push); will build."
             exit 1
@@ -55,12 +57,11 @@ jobs:
           STAGING_IMAGE="ghcr.io/${{ github.repository }}:staging-${DEVELOP_SHA}"
           echo "Looking for staging image: ${STAGING_IMAGE}"
           if docker manifest inspect "${STAGING_IMAGE}" > /dev/null 2>&1; then
-            echo "Found staging image — retagging as prod."
-            docker pull "${STAGING_IMAGE}"
-            docker tag "${STAGING_IMAGE}" "ghcr.io/${{ github.repository }}:latest"
-            docker tag "${STAGING_IMAGE}" "ghcr.io/${{ github.repository }}:${{ github.sha }}"
-            docker push "ghcr.io/${{ github.repository }}:latest"
-            docker push "ghcr.io/${{ github.repository }}:${{ github.sha }}"
+            echo "Found staging image — retagging as prod (no download needed)."
+            docker buildx imagetools create \
+              --tag "ghcr.io/${{ github.repository }}:latest" \
+              --tag "ghcr.io/${{ github.repository }}:${{ github.sha }}" \
+              "${STAGING_IMAGE}"
           else
             echo "Staging image not found; will build from source."
             exit 1
