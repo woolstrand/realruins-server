@@ -160,6 +160,7 @@ All web routes render Leaf templates and return HTML.
 | `GET /view/maps/topseeds` | `seedslist.leaf` | Top seeds table |
 | `GET /view/maps/seed/:seed` | `mapslist.leaf` | Paginated map list for a seed |
 | `GET /view/distribution/seed/:seed` | `mapsdistr.leaf` | Coverage × size distribution matrix |
+| `GET /view/visitors` | `visitors.leaf` | Analytics dashboard (unique API/dashboard users + recent uploads) |
 
 ---
 
