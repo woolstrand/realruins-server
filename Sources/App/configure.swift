@@ -26,8 +26,8 @@ public func configure(_ app: Application) throws {
 
     // MARK: - MySQL database
     // No migrations are run so existing data is preserved.
-    let dbHost     = ProcessInfo.processInfo.environment["DATABASE_HOST"]     ?? "localhost"
-    let dbPortStr  = ProcessInfo.processInfo.environment["DATABASE_PORT"]
+    let dbHost     = Environment.get("DATABASE_HOST")     ?? "localhost"
+    let dbPortStr  = Environment.get("DATABASE_PORT")
     let dbPort: Int
     if let portStr = dbPortStr, let parsed = Int(portStr) {
         dbPort = parsed
@@ -37,9 +37,11 @@ public func configure(_ app: Application) throws {
         }
         dbPort = 3306
     }
-    let dbName     = ProcessInfo.processInfo.environment["DATABASE_NAME"]     ?? "realruins"
-    let dbUser     = ProcessInfo.processInfo.environment["DATABASE_USERNAME"] ?? "realruins"
-    let dbPassword = ProcessInfo.processInfo.environment["DATABASE_PASSWORD"] ?? "123456"
+    guard let dbName     = Environment.get("DATABASE_NAME"),
+          let dbUser     = Environment.get("DATABASE_USERNAME"),
+          let dbPassword = Environment.get("DATABASE_PASSWORD") else {
+              fatalError("Database configuration environment variables missing (DATABASE_NAME, DATABASE_USERNAME, DATABASE_PASSWORD)")
+    }
 
     app.databases.use(
         .mysql(
@@ -54,10 +56,12 @@ public func configure(_ app: Application) throws {
     )
 
     // MARK: - S3 / DigitalOcean Spaces
-    let s3AccessKey = ProcessInfo.processInfo.environment["S3_API_KEY"]    ?? "123456"
-    let s3SecretKey = ProcessInfo.processInfo.environment["S3_API_SECRET"] ?? "123456"
-    let s3Bucket    = ProcessInfo.processInfo.environment["S3_BUCKET"]     ?? "realruinsv2"
-    let s3Region    = ProcessInfo.processInfo.environment["S3_REGION"]     ?? "sfo2"
+    guard let s3AccessKey = ProcessInfo.processInfo.environment("S3_API_KEY"),
+          let s3SecretKey = ProcessInfo.processInfo.environment("S3_API_SECRET"),
+          let s3Bucket    = ProcessInfo.processInfo.environment("S3_BUCKET"),
+          let s3Region    = ProcessInfo.processInfo.environment("S3_REGION") else {
+                fatalError("S3 configuration environment variables missing (S3_API_KEY, S3_API_SECRET, S3_BUCKET, S3_REGION)")
+    }
 
     app.s3Uploader = S3Uploader(
         accessKey: s3AccessKey,
@@ -66,11 +70,6 @@ public func configure(_ app: Application) throws {
         host: "\(s3Region).digitaloceanspaces.com",
         region: s3Region
     )
-
-    // Warn loudly if any credential is still using the placeholder value.
-    if [dbPassword, s3AccessKey, s3SecretKey].contains("123456") {
-        app.logger.warning("One or more credentials are using placeholder values. Set DATABASE_PASSWORD, S3_API_KEY and S3_API_SECRET environment variables before running in production.")
-    }
 
     // MARK: - Routes
     try routes(app)
