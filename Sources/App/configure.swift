@@ -56,10 +56,10 @@ public func configure(_ app: Application) throws {
     )
 
     // MARK: - S3 / DigitalOcean Spaces
-    guard let s3AccessKey = ProcessInfo.processInfo.environment("S3_API_KEY"),
-          let s3SecretKey = ProcessInfo.processInfo.environment("S3_API_SECRET"),
-          let s3Bucket    = ProcessInfo.processInfo.environment("S3_BUCKET"),
-          let s3Region    = ProcessInfo.processInfo.environment("S3_REGION") else {
+    guard let s3AccessKey = Environment.get("S3_API_KEY"),
+          let s3SecretKey = Environment.get("S3_API_SECRET"),
+          let s3Bucket    = Environment.get("S3_BUCKET"),
+          let s3Region    = Environment.get("S3_REGION") else {
                 fatalError("S3 configuration environment variables missing (S3_API_KEY, S3_API_SECRET, S3_BUCKET, S3_REGION)")
     }
 
