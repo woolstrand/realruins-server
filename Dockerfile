@@ -1,8 +1,6 @@
 # Build stage
 FROM swift:5.9-focal as builder
 
-ARG env
-
 RUN apt-get -qq update && apt-get -q -y install \
   tzdata \
   && rm -r /var/lib/apt/lists/*
@@ -23,6 +21,5 @@ COPY --from=builder /build/bin/Run .
 COPY --from=builder /build/lib/* /usr/lib/
 COPY --from=builder /app/Public ./Public
 COPY --from=builder /app/Resources ./Resources
-ENV ENVIRONMENT=$env
 
-ENTRYPOINT ./Run serve --env $ENVIRONMENT --hostname 0.0.0.0 --port 80
+ENTRYPOINT ["./Run", "serve", "--hostname", "0.0.0.0", "--port", "80"]
