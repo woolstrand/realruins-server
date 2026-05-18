@@ -4,38 +4,52 @@
 
 | Dependency | Details |
 |------------|---------|
-| MySQL | `localhost:3306`, DB `realruins`, user `realruins` |
-| DigitalOcean Spaces | Bucket `realruinsv2`, region `sfo2` |
+| MySQL | Configurable via env vars (see below) |
+| DigitalOcean Spaces | Bucket and region configurable via env vars (see below) |
 | Log directory | `/var/log/RRServer/` (created on startup if absent) |
 
 ---
 
 ## Configuration & Secrets
 
-Credentials are read from environment variables at startup, with placeholder fallbacks
-when the variables are not set:
+All settings are read from environment variables at startup in `Sources/App/configure.swift`,
+with placeholder fallbacks when variables are not set:
 
 | Environment variable | Purpose | Default (placeholder) |
 |----------------------|---------|----------------------|
-| `MYSQL_PASSWORD`     | MySQL password | `123456` |
+| `DATABASE_HOST`      | MySQL hostname | `localhost` |
+| `DATABASE_PORT`      | MySQL port | `3306` |
+| `DATABASE_NAME`      | MySQL database name | `realruins` |
+| `DATABASE_USERNAME`  | MySQL username | `realruins` |
+| `DATABASE_PASSWORD`  | MySQL password | `123456` |
 | `S3_API_KEY`         | DigitalOcean Spaces access key | `123456` |
 | `S3_API_SECRET`      | DigitalOcean Spaces secret key | `123456` |
-
-The values are read in `Sources/App/secureconstants.swift` using `ProcessInfo.processInfo.environment`.
+| `S3_BUCKET`          | Spaces bucket name | `realruinsv2` |
+| `S3_REGION`          | Spaces region (also used to build the endpoint host) | `sfo2` |
 
 For Docker deployments, pass secrets at **runtime** — not at build time — so they are never
 baked into the image:
 
 ```bash
 docker run -p 80:80 \
-  -e MYSQL_PASSWORD=<real-password> \
+  -e DATABASE_HOST=<db-host> \
+  -e DATABASE_PORT=3306 \
+  -e DATABASE_NAME=realruins \
+  -e DATABASE_USERNAME=realruins \
+  -e DATABASE_PASSWORD=<real-password> \
   -e S3_API_KEY=<real-key> \
   -e S3_API_SECRET=<real-secret> \
+  -e S3_BUCKET=realruinsv2 \
+  -e S3_REGION=sfo2 \
   ghcr.io/woolstrand/realruins-server:latest
 ```
 
-The GitHub Actions secrets `MYSQL_PASSWORD`, `S3_API_KEY`, and `S3_API_SECRET` stored in the
-`staging` and `production` environments map directly to these variable names.
+Update the GitHub Actions secrets in the `staging` and `production` environments to use
+`DATABASE_PASSWORD` instead of the old `MYSQL_PASSWORD`. The following variables need
+explicit secrets (or at minimum non-default values) for production use:
+`DATABASE_HOST`, `DATABASE_NAME`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`,
+`S3_API_KEY`, `S3_API_SECRET`, `S3_BUCKET`, and `S3_REGION`.
+`DATABASE_PORT` can typically remain at the default `3306`.
 
 ---
 
@@ -72,10 +86,11 @@ docker build -t rr-server .
 # Run (example)
 docker run -p 80:80 \
   -e ENVIRONMENT=production \
+  -e DATABASE_HOST=<db-host> \
   rr-server
 ```
 
-The container listens on port 80 and expects MySQL to be reachable at `localhost:3306` from within the container (or wherever the hardcoded hostname resolves). For Docker deployments the DB host must be changed from `localhost` to the actual container/host name — this currently requires a code change.
+The container listens on port 80. Set `DATABASE_HOST` to the MySQL host reachable from inside the container (e.g. a Docker network alias or external hostname).
 
 ### 2. Direct `swift run`
 
@@ -102,19 +117,5 @@ docker pull ghcr.io/woolstrand/realruins-server:latest
 ```
 
 ---
-
-## Other Hardcoded Values
-
-The following values are still hardcoded. They could be extracted similarly to the credentials above:
-
-| Variable | Purpose |
-|----------|---------|
-| `DB_HOST` | MySQL hostname (default: `localhost`) |
-| `DB_PORT` | MySQL port (default: `3306`) |
-| `DB_USER` | MySQL username |
-| `DB_NAME` | MySQL database name |
-| `S3_BUCKET` | Spaces bucket name |
-| `S3_HOST` | Spaces endpoint host |
-| `S3_REGION` | Spaces region |
 
 See `docs/suggestions.md` for a staging/production deployment plan.
