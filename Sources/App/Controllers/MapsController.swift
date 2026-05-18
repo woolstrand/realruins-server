@@ -89,7 +89,7 @@ final class MapsController {
         let limit = limitObj?.limit ?? 50
 
         // Returns <limit> records starting from a random ID to avoid full-table scan.
-        return try await req.sqlDb
+        let result = try await req.sqlDb
             .raw("""
                 SELECT GameMap.* FROM GameMap
                 JOIN (SELECT (RAND() * (SELECT MAX(id) FROM GameMap)) AS id) AS r2
@@ -98,6 +98,11 @@ final class MapsController {
                 LIMIT \(bind: limit)
                 """)
             .all(decodingFluent: GameMap.self)
+
+        if let ip = req.remoteAddress?.ipAddress {
+            await AnalyticsService.record(ip: ip, type: .randomRead, on: req.db)
+        }
+        return result
     }
 
     func withSeed(_ req: Request) async throws -> [GameMap] {
@@ -122,10 +127,15 @@ final class MapsController {
             query = query.filter(\.$coverage == coverage)
         }
 
-        return try await query
+        let result = try await query
             .sort(DatabaseQuery.Sort.sort(.custom("RAND()"), .ascending))
             .range(offset..<(offset + limit))
             .all()
+
+        if let ip = req.remoteAddress?.ipAddress {
+            await AnalyticsService.record(ip: ip, type: .seedRead, on: req.db)
+        }
+        return result
     }
 
     func distribution(_ req: Request) async throws -> Distribution {
@@ -183,6 +193,7 @@ final class MapsController {
         let rawData = Data(buffer: data)
         let gameMap = try GameMap(blueprintData: rawData, externalGameId: UInt64(gameIdStr?.gameId ?? ""))
 
+        let savedMap: GameMap
         if let storedMap = try await GameMap.query(on: req.db)
             .filter(\.$gameId == gameMap.gameId)
             .filter(\.$tileId == gameMap.tileId)
@@ -194,7 +205,7 @@ final class MapsController {
             storedMap.width = gameMap.width
             try await req.s3Uploader.upload(client: req.client, data: data, fileName: storedMap.nameInBucket)
             try await storedMap.update(on: req.db)
-            return storedMap
+            savedMap = storedMap
 
         } else {
             // Create new map
@@ -202,8 +213,13 @@ final class MapsController {
             try await req.s3Uploader.upload(client: req.client, data: data, fileName: filename)
             gameMap.nameInBucket = filename
             try await gameMap.save(on: req.db)
-            return gameMap
+            savedMap = gameMap
         }
+
+        if let ip = req.remoteAddress?.ipAddress {
+            await AnalyticsService.record(ip: ip, type: .upload, on: req.db)
+        }
+        return savedMap
     }
 
     func voteForRemoval(_ req: Request) async throws -> HTTPStatus {

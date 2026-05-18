@@ -3,6 +3,21 @@ import FluentMySQLDriver
 import Vapor
 import Leaf
 
+// MARK: - Analytics lifecycle handler
+
+private struct AnalyticsLifecycleHandler: LifecycleHandler {
+    func didBoot(_ app: Application) throws {
+        Task {
+            do {
+                try await AnalyticsService.ensureTables(on: app.db)
+                try await AnalyticsService.cleanup(on: app.db)
+            } catch {
+                app.logger.error("Analytics initialization failed: \(error)")
+            }
+        }
+    }
+}
+
 /// Called before your application initializes.
 public func configure(_ app: Application) throws {
 
@@ -70,6 +85,9 @@ public func configure(_ app: Application) throws {
         host: "\(s3Region).digitaloceanspaces.com",
         region: s3Region
     )
+
+    // MARK: - Analytics (auto-create tables, run cleanup)
+    app.lifecycle.use(AnalyticsLifecycleHandler())
 
     // MARK: - Routes
     try routes(app)

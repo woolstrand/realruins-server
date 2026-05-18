@@ -1,10 +1,3 @@
-//
-//  WebMapsController.swift
-//  App
-//
-//  Created by IC on 20/01/2019.
-//
-
 import Foundation
 import Vapor
 import Fluent
@@ -37,15 +30,51 @@ struct DistributionContext: Encodable {
     let title: String
 }
 
+// MARK: - Visitors page context types
+
+struct RecentUpload: Encodable {
+    let id: Int
+    let seed: String
+    let mapSize: Int
+    let version: String
+    let width: Int
+    let height: Int
+    let updatedAt: String
+}
+
+struct VisitorsContext: Encodable {
+    let todayStr: String
+    // Daily stats
+    let dailyUploaders: Int
+    let dailyRandomReaders: Int
+    let dailySeedReaders: Int
+    let dailyApiTotal: Int
+    let dailyDashboard: Int
+    // Monthly stats (last 30 days)
+    let monthlyUploaders: Int
+    let monthlyRandomReaders: Int
+    let monthlySeedReaders: Int
+    let monthlyApiTotal: Int
+    let monthlyDashboard: Int
+    // Recent uploads
+    let recentUploads: [RecentUpload]
+}
+
 final class MapsViewController {
 
     func index(_ req: Request) async throws -> View {
+        if let ip = req.remoteAddress?.ipAddress {
+            await AnalyticsService.record(ip: ip, type: .dashboard, on: req.db)
+        }
         return try await req.view.render("index")
     }
 
     func viewMap(_ req: Request) async throws -> View {
         guard let mapId = req.parameters.get("id", as: Int.self) else {
             throw RealRuinsError.invalidParameters("No ID provided")
+        }
+        if let ip = req.remoteAddress?.ipAddress {
+            await AnalyticsService.record(ip: ip, type: .dashboard, on: req.db)
         }
         return try await req.view.render("mapView", ["mapId": mapId])
     }
@@ -54,11 +83,17 @@ final class MapsViewController {
         let gameMap = try await GameMap.query(on: req.db)
             .sort(DatabaseQuery.Sort.sort(.custom("RAND()"), .ascending))
             .first()
+        if let ip = req.remoteAddress?.ipAddress {
+            await AnalyticsService.record(ip: ip, type: .dashboard, on: req.db)
+        }
         return try await req.view.render("mapView", ["mapId": gameMap?.id ?? 0])
     }
 
     func viewStats(_ req: Request) async throws -> View {
         let count = try await GameMap.query(on: req.db).count()
+        if let ip = req.remoteAddress?.ipAddress {
+            await AnalyticsService.record(ip: ip, type: .dashboard, on: req.db)
+        }
         return try await req.view.render("stats", ["total": "\(count)"])
     }
 
@@ -90,6 +125,10 @@ final class MapsViewController {
             .range(offset..<(offset + limit))
             .all()
 
+        if let ip = req.remoteAddress?.ipAddress {
+            await AnalyticsService.record(ip: ip, type: .dashboard, on: req.db)
+        }
+
         return try await req.view.render(
             "mapslist",
             MapsContext(
@@ -108,6 +147,10 @@ final class MapsViewController {
         let limitObj = try? req.query.decode(Limit.self)
         let offset = limitObj?.offset ?? 0
         let limit = limitObj?.limit ?? 50
+
+        if let ip = req.remoteAddress?.ipAddress {
+            await AnalyticsService.record(ip: ip, type: .dashboard, on: req.db)
+        }
 
         return try await req.view.render(
             "seedslist",
@@ -148,9 +191,63 @@ final class MapsViewController {
             }
         }
 
+        if let ip = req.remoteAddress?.ipAddress {
+            await AnalyticsService.record(ip: ip, type: .dashboard, on: req.db)
+        }
+
         return try await req.view.render(
             "mapsdistr",
             DistributionContext(hcaptions: columnCaptions, rows: dataRows, title: "Distribution")
         )
+    }
+
+    // MARK: - Visitors analytics page
+
+    func viewVisitors(_ req: Request) async throws -> View {
+        let daily   = (try? await AnalyticsService.dailyStats(on: req.db))   ?? .zero
+        let monthly = (try? await AnalyticsService.monthlyStats(on: req.db)) ?? .zero
+
+        // Fetch 10 most recent uploads
+        let maps = try await GameMap.query(on: req.db)
+            .sort(\.$id, .descending)
+            .range(0..<10)
+            .all()
+
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd HH:mm"
+        dateFormatter.timeZone = TimeZone(identifier: "UTC")
+
+        let todayFormatter = DateFormatter()
+        todayFormatter.dateFormat = "yyyy-MM-dd"
+        todayFormatter.timeZone = TimeZone(identifier: "UTC")
+
+        let recentUploads = maps.map { map in
+            RecentUpload(
+                id:        map.id ?? 0,
+                seed:      map.seed,
+                mapSize:   map.mapSize,
+                version:   map.version,
+                width:     map.width,
+                height:    map.height,
+                updatedAt: dateFormatter.string(from: map.updatedAt)
+            )
+        }
+
+        let context = VisitorsContext(
+            todayStr:            todayFormatter.string(from: Date()),
+            dailyUploaders:      daily.uploaders,
+            dailyRandomReaders:  daily.randomReaders,
+            dailySeedReaders:    daily.seedReaders,
+            dailyApiTotal:       daily.apiTotal,
+            dailyDashboard:      daily.dashboard,
+            monthlyUploaders:    monthly.uploaders,
+            monthlyRandomReaders: monthly.randomReaders,
+            monthlySeedReaders:  monthly.seedReaders,
+            monthlyApiTotal:     monthly.apiTotal,
+            monthlyDashboard:    monthly.dashboard,
+            recentUploads:       recentUploads
+        )
+
+        return try await req.view.render("visitors", context)
     }
 }

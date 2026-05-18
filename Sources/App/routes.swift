@@ -37,4 +37,5 @@ public func routes(_ app: Application) throws {
 
     app.get("view", "maps", "seed", ":seed", use: gameMapViewController.withSeed)
     app.get("view", "distribution", "seed", ":seed", use: gameMapViewController.mapsDistribution)
+    app.get("view", "visitors", use: gameMapViewController.viewVisitors)
 }
