@@ -97,7 +97,7 @@ final class MapsController {
                 ORDER BY GameMap.id ASC
                 LIMIT \(bind: limit)
                 """)
-            .all(decoding: GameMap.self)
+            .all(decodingFluent: GameMap.self)
     }
 
     func withSeed(_ req: Request) async throws -> [GameMap] {
