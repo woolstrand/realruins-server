@@ -27,7 +27,16 @@ public func configure(_ app: Application) throws {
     // MARK: - MySQL database
     // No migrations are run so existing data is preserved.
     let dbHost     = ProcessInfo.processInfo.environment["DATABASE_HOST"]     ?? "localhost"
-    let dbPort     = Int(ProcessInfo.processInfo.environment["DATABASE_PORT"] ?? "3306") ?? 3306
+    let dbPortStr  = ProcessInfo.processInfo.environment["DATABASE_PORT"]
+    let dbPort: Int
+    if let portStr = dbPortStr, let parsed = Int(portStr) {
+        dbPort = parsed
+    } else {
+        if dbPortStr != nil {
+            app.logger.warning("DATABASE_PORT value '\(dbPortStr!)' is not a valid integer; using default port 3306.")
+        }
+        dbPort = 3306
+    }
     let dbName     = ProcessInfo.processInfo.environment["DATABASE_NAME"]     ?? "realruins"
     let dbUser     = ProcessInfo.processInfo.environment["DATABASE_USERNAME"] ?? "realruins"
     let dbPassword = ProcessInfo.processInfo.environment["DATABASE_PASSWORD"] ?? "123456"

@@ -45,7 +45,11 @@ docker run -p 80:80 \
 ```
 
 Update the GitHub Actions secrets in the `staging` and `production` environments to use
-`DATABASE_PASSWORD` instead of the old `MYSQL_PASSWORD`, and add the new variables listed above.
+`DATABASE_PASSWORD` instead of the old `MYSQL_PASSWORD`. The following variables need
+explicit secrets (or at minimum non-default values) for production use:
+`DATABASE_HOST`, `DATABASE_NAME`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`,
+`S3_API_KEY`, `S3_API_SECRET`, `S3_BUCKET`, and `S3_REGION`.
+`DATABASE_PORT` can typically remain at the default `3306`.
 
 ---
 
