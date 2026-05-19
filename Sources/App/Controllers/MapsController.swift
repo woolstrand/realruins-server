@@ -184,14 +184,24 @@ final class MapsController {
 
     /// Saves a decoded `GameMap` to the database and uploads blueprint to S3.
     func create(_ req: Request) async throws -> GameMap {
-        req.logger.info("POST /maps: received upload request, body \(req.body.data?.readableBytes ?? 0) bytes")
-        guard let data = req.body.data else {
+        req.logger.info("POST /maps: received upload request, collecting body")
+
+        // Collect the body explicitly in the async handler context (rather than
+        // at the route-dispatch level on the NIO event loop).  This ensures that
+        // Vapor's request-logger middleware runs *before* body collection, so any
+        // hang during collection is visible in the logs.  The 50 MB cap is well
+        // above the largest expected blueprint file.
+        let bodyBuffer = try await req.body.collect(upTo: 50 * 1024 * 1024)
+
+        req.logger.info("POST /maps: body collected, \(bodyBuffer.readableBytes) bytes")
+
+        guard bodyBuffer.readableBytes > 0 else {
             throw RealRuinsError.noData()
         }
 
         // gameId is sent as a String query param to avoid integer overflow issues.
         let gameIdStr = try? req.query.decode(GameId.self)
-        let rawData = Data(buffer: data)
+        let rawData = Data(buffer: bodyBuffer)
         let gameMap = try GameMap(blueprintData: rawData, externalGameId: UInt64(gameIdStr?.gameId ?? ""))
 
         req.logger.info("POST /maps: parsed blueprint — seed=\(gameMap.seed) tileId=\(gameMap.tileId) gameId=\(gameMap.gameId) size=\(gameMap.mapSize) coverage=\(gameMap.coverage)")
@@ -207,7 +217,7 @@ final class MapsController {
             storedMap.updatedAt = Date()
             storedMap.height = gameMap.height
             storedMap.width = gameMap.width
-            try await req.s3Uploader.upload(client: req.client, data: data, fileName: storedMap.nameInBucket, logger: req.logger)
+            try await req.s3Uploader.upload(client: req.client, data: bodyBuffer, fileName: storedMap.nameInBucket, logger: req.logger)
             try await storedMap.update(on: req.db)
             savedMap = storedMap
 
@@ -215,7 +225,7 @@ final class MapsController {
             // Create new map
             let filename = UUID().uuidString
             req.logger.info("POST /maps: creating new map bucket=\(filename)")
-            try await req.s3Uploader.upload(client: req.client, data: data, fileName: filename, logger: req.logger)
+            try await req.s3Uploader.upload(client: req.client, data: bodyBuffer, fileName: filename, logger: req.logger)
             gameMap.nameInBucket = filename
             try await gameMap.save(on: req.db)
             savedMap = gameMap
