@@ -96,5 +96,6 @@ public func configure(_ app: Application) throws {
     app.lifecycle.use(AnalyticsLifecycleHandler())
 
     // MARK: - Routes
+    app.routes.defaultMaxBodySize = "50mb"
     try routes(app)
 }
