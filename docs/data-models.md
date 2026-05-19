@@ -124,6 +124,10 @@ Files stored in Spaces are **gzip-compressed XML**. After decompression the stru
 - `<terrain def="…" />` — terrain type (optional)
 - `<item def="…" stuffDef="…" />` — placed objects (0 or more per cell)
 
+### Blueprint parsing
+
+`GameMap.init(blueprintData: ByteBuffer, externalGameId:)` parses uploads using `XMLParser` (SAX). The whole document is parsed to completion — **not** truncated early — so that `parse()` can return `false` for corrupt or truncated XML. Any blueprint that does not parse completely is rejected with a `400 Bad Request` and is never written to the database or uploaded to S3. The error message includes the libxml2 line/column of the failure.
+
 ---
 
 ## Object Storage
