@@ -18,7 +18,7 @@ struct S3Uploader {
     let region: String
 
     // Upload `data` as `<fileName>.bp` using path-style addressing.
-    func upload(client: Client, data: ByteBuffer, fileName: String) async throws {
+    func upload(client: Client, data: ByteBuffer, fileName: String, logger: Logger) async throws {
         let key = "\(fileName).bp"
         let path = "/\(bucket)/\(key)"
         let urlString = "https://\(host)\(path)"
@@ -80,8 +80,12 @@ struct S3Uploader {
         request.body = data
 
         let response = try await client.send(request)
-        guard response.status.code / 100 == 2 else {
-            throw Abort(.internalServerError, reason: "S3 upload failed with HTTP \(response.status.code)")
+        let statusCode = response.status.code
+        let responseBody = response.body.map { String(buffer: $0) } ?? ""
+
+        guard statusCode / 100 == 2 else {
+            logger.error("S3 upload failed: HTTP \(statusCode) from \(urlString) — body: \(responseBody)")
+            throw Abort(.internalServerError, reason: "S3 upload failed with HTTP \(statusCode)")
         }
     }
 

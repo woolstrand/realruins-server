@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Visitors Analytics</title>
+<link href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet">
+<style>
+  .stat-value { font-size: 1.6em; font-weight: bold; }
+  .panel-heading h3 { margin: 0; }
+</style>
+</head>
+<body class="container">
+
+<h1 class="text-center">Visitors Analytics</h1>
+<p class="text-center text-muted">Data as of #(todayStr) UTC</p>
+
+<div class="row">
+  <!-- Daily API Users -->
+  <div class="col-sm-6">
+    <div class="panel panel-primary">
+      <div class="panel-heading"><h3>Today — API Users</h3></div>
+      <div class="panel-body">
+        <table class="table table-condensed table-bordered">
+          <thead><tr><th>Category</th><th class="text-right">Unique IPs</th></tr></thead>
+          <tbody>
+            <tr><td>Uploaders</td><td class="text-right stat-value">#(dailyUploaders)</td></tr>
+            <tr><td>Random readers</td><td class="text-right stat-value">#(dailyRandomReaders)</td></tr>
+            <tr><td>Planetary ruins readers</td><td class="text-right stat-value">#(dailySeedReaders)</td></tr>
+            <tr class="active"><td><strong>Total API</strong></td><td class="text-right stat-value"><strong>#(dailyApiTotal)</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Daily Dashboard Users -->
+  <div class="col-sm-6">
+    <div class="panel panel-info">
+      <div class="panel-heading"><h3>Today — Dashboard Users</h3></div>
+      <div class="panel-body">
+        <table class="table table-condensed table-bordered">
+          <thead><tr><th>Category</th><th class="text-right">Unique IPs</th></tr></thead>
+          <tbody>
+            <tr><td>Dashboard visitors</td><td class="text-right stat-value">#(dailyDashboard)</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <!-- Monthly API Users -->
+  <div class="col-sm-6">
+    <div class="panel panel-success">
+      <div class="panel-heading"><h3>Last 30 Days — API Users</h3></div>
+      <div class="panel-body">
+        <table class="table table-condensed table-bordered">
+          <thead><tr><th>Category</th><th class="text-right">Unique IPs</th></tr></thead>
+          <tbody>
+            <tr><td>Uploaders</td><td class="text-right stat-value">#(monthlyUploaders)</td></tr>
+            <tr><td>Random readers</td><td class="text-right stat-value">#(monthlyRandomReaders)</td></tr>
+            <tr><td>Planetary ruins readers</td><td class="text-right stat-value">#(monthlySeedReaders)</td></tr>
+            <tr class="active"><td><strong>Total API</strong></td><td class="text-right stat-value"><strong>#(monthlyApiTotal)</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Monthly Dashboard Users -->
+  <div class="col-sm-6">
+    <div class="panel panel-warning">
+      <div class="panel-heading"><h3>Last 30 Days — Dashboard Users</h3></div>
+      <div class="panel-body">
+        <table class="table table-condensed table-bordered">
+          <thead><tr><th>Category</th><th class="text-right">Unique IPs</th></tr></thead>
+          <tbody>
+            <tr><td>Dashboard visitors</td><td class="text-right stat-value">#(monthlyDashboard)</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Ten Recent Uploads -->
+<div class="row">
+  <div class="col-xs-12">
+    <div class="panel panel-default">
+      <div class="panel-heading"><h3>Ten Recent Uploads</h3></div>
+      <div class="panel-body">
+        <table class="table table-striped table-condensed table-bordered">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Seed</th>
+              <th>Map size</th>
+              <th>Blueprint (cells)</th>
+              <th>File size</th>
+              <th>Game version</th>
+              <th>Uploaded (UTC)</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            #if(count(recentUploads) > 0):
+            #for(upload in recentUploads):
+            <tr>
+              <td>#(upload.id)</td>
+              <td>#(upload.seed)</td>
+              <td>#(upload.mapSize)×#(upload.mapSize)</td>
+              <td>#(upload.width)×#(upload.height)</td>
+              <td class="text-muted">N/A</td>
+              <td>#(upload.version)</td>
+              <td>#(upload.updatedAt)</td>
+              <td><a href="/view/map/#(upload.id)">View</a></td>
+            </tr>
+            #endfor
+            #else:
+            <tr><td colspan="8" class="text-center text-muted">No uploads yet</td></tr>
+            #endif
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

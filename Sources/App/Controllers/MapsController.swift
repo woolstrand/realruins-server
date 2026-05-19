@@ -89,7 +89,7 @@ final class MapsController {
         let limit = limitObj?.limit ?? 50
 
         // Returns <limit> records starting from a random ID to avoid full-table scan.
-        return try await req.sqlDb
+        let result = try await req.sqlDb
             .raw("""
                 SELECT GameMap.* FROM GameMap
                 JOIN (SELECT (RAND() * (SELECT MAX(id) FROM GameMap)) AS id) AS r2
@@ -98,6 +98,11 @@ final class MapsController {
                 LIMIT \(bind: limit)
                 """)
             .all(decodingFluent: GameMap.self)
+
+        if let ip = req.remoteAddress?.ipAddress {
+            await AnalyticsService.record(ip: ip, type: .randomRead, on: req.db)
+        }
+        return result
     }
 
     func withSeed(_ req: Request) async throws -> [GameMap] {
@@ -122,10 +127,15 @@ final class MapsController {
             query = query.filter(\.$coverage == coverage)
         }
 
-        return try await query
+        let result = try await query
             .sort(DatabaseQuery.Sort.sort(.custom("RAND()"), .ascending))
             .range(offset..<(offset + limit))
             .all()
+
+        if let ip = req.remoteAddress?.ipAddress {
+            await AnalyticsService.record(ip: ip, type: .seedRead, on: req.db)
+        }
+        return result
     }
 
     func distribution(_ req: Request) async throws -> Distribution {
@@ -174,36 +184,48 @@ final class MapsController {
 
     /// Saves a decoded `GameMap` to the database and uploads blueprint to S3.
     func create(_ req: Request) async throws -> GameMap {
-        guard let data = req.body.data else {
+        // Collect the body explicitly in the async handler context rather than
+        // at the route-dispatch level on the NIO event loop.  The 50 MB cap is
+        // well above the largest expected blueprint file.
+        let bodyBuffer = try await req.body.collect(upTo: 50 * 1024 * 1024)
+
+        guard bodyBuffer.readableBytes > 0 else {
             throw RealRuinsError.noData()
         }
 
         // gameId is sent as a String query param to avoid integer overflow issues.
         let gameIdStr = try? req.query.decode(GameId.self)
-        let rawData = Data(buffer: data)
+        let rawData = Data(buffer: bodyBuffer)
         let gameMap = try GameMap(blueprintData: rawData, externalGameId: UInt64(gameIdStr?.gameId ?? ""))
 
-        if let storedMap = try await GameMap.query(on: req.db)
+        let dbResult = try await GameMap.query(on: req.db)
             .filter(\.$gameId == gameMap.gameId)
             .filter(\.$tileId == gameMap.tileId)
-            .first() {
+            .first()
 
+        let savedMap: GameMap
+        if let storedMap = dbResult {
             // Update existing map
             storedMap.updatedAt = Date()
             storedMap.height = gameMap.height
             storedMap.width = gameMap.width
-            try await req.s3Uploader.upload(client: req.client, data: data, fileName: storedMap.nameInBucket)
+            try await req.s3Uploader.upload(client: req.client, data: bodyBuffer, fileName: storedMap.nameInBucket, logger: req.logger)
             try await storedMap.update(on: req.db)
-            return storedMap
+            savedMap = storedMap
 
         } else {
             // Create new map
             let filename = UUID().uuidString
-            try await req.s3Uploader.upload(client: req.client, data: data, fileName: filename)
+            try await req.s3Uploader.upload(client: req.client, data: bodyBuffer, fileName: filename, logger: req.logger)
             gameMap.nameInBucket = filename
             try await gameMap.save(on: req.db)
-            return gameMap
+            savedMap = gameMap
         }
+
+        if let ip = req.remoteAddress?.ipAddress {
+            await AnalyticsService.record(ip: ip, type: .upload, on: req.db)
+        }
+        return savedMap
     }
 
     func voteForRemoval(_ req: Request) async throws -> HTTPStatus {

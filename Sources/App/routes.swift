@@ -20,7 +20,7 @@ public func routes(_ app: Application) throws {
     app.get("maps", "random", use: gameMapController.random)
     app.get("maps", "seed", ":seed", use: gameMapController.withSeed)
     app.get("maps", "topseeds", use: gameMapController.topSeeds)
-    app.on(.POST, "maps", body: .collect(maxSize: "50mb"), use: gameMapController.create)
+    app.on(.POST, "maps", body: .stream, use: gameMapController.create)
 
     app.get("maps", "json", ":id", use: gameMapController.json)
     app.get("maps", "json2", ":id", use: gameMapController.json2)
@@ -37,4 +37,5 @@ public func routes(_ app: Application) throws {
 
     app.get("view", "maps", "seed", ":seed", use: gameMapViewController.withSeed)
     app.get("view", "distribution", "seed", ":seed", use: gameMapViewController.mapsDistribution)
+    app.get("view", "visitors", use: gameMapViewController.viewVisitors)
 }

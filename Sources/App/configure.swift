@@ -3,6 +3,21 @@ import FluentMySQLDriver
 import Vapor
 import Leaf
 
+// MARK: - Analytics lifecycle handler
+
+private struct AnalyticsLifecycleHandler: LifecycleHandler {
+    func didBoot(_ app: Application) throws {
+        Task {
+            do {
+                try await AnalyticsService.ensureTables(on: app.db)
+                try await AnalyticsService.cleanup(on: app.db)
+            } catch {
+                app.logger.error("Analytics initialization failed: \(error)")
+            }
+        }
+    }
+}
+
 /// Called before your application initializes.
 public func configure(_ app: Application) throws {
 
@@ -71,6 +86,16 @@ public func configure(_ app: Application) throws {
         region: s3Region
     )
 
+    // MARK: - HTTP client (timeouts for outgoing requests such as S3 uploads)
+    // Without these limits an unreachable S3 endpoint causes the upload handler
+    // to hang indefinitely, producing a 502 from the reverse proxy with no
+    // Vapor-side logs at all.
+    app.http.client.configuration.timeout = .init(connect: .seconds(10), read: .seconds(60))
+
+    // MARK: - Analytics (auto-create tables, run cleanup)
+    app.lifecycle.use(AnalyticsLifecycleHandler())
+
     // MARK: - Routes
+    app.routes.defaultMaxBodySize = "50mb"
     try routes(app)
 }

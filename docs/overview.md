@@ -40,7 +40,8 @@ rr-server/
 │   │   │   ├── GameMap.swift     # Blueprint metadata model
 │   │   │   └── Vote.swift        # Map vote model
 │   │   └── Services/
-│   │       └── MapsService.swift # Registered but currently empty stub
+│   │       ├── MapsService.swift     # Registered but currently empty stub
+│   │       └── AnalyticsService.swift # Analytics recording, cleanup, and stats queries
 │   └── Run/
 │       └── main.swift            # Process entry point
 ├── Resources/Views/              # Leaf HTML templates
@@ -50,6 +51,7 @@ rr-server/
 │   ├── seedslist.leaf
 │   ├── mapsdistr.leaf
 │   ├── stats.leaf
+│   ├── visitors.leaf
 │   └── tablebase.leaf
 ├── Tests/AppTests/               # Minimal test stub (no real tests)
 ├── Package.swift                 # SPM manifest (swift-tools-version:5.5)

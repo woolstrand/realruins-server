@@ -50,6 +50,45 @@ Deduplication: application code checks for an existing `(mapId, ip, voteType)` t
 
 ---
 
+## Analytics
+
+Both analytics tables are created automatically at server startup via `CREATE TABLE IF NOT EXISTS`. No manual setup is needed.
+
+### analytics_events
+
+**Purpose**: Stores one row per unique `(ip, event_type, event_date)` tuple, covering the last 30 days. Raw events older than 30 days are archived to `analytics_daily_summary` and deleted.
+
+| Column | MySQL type | Notes |
+|--------|-----------|-------|
+| `id` | INT AUTO_INCREMENT | Primary key |
+| `ip` | VARCHAR(45) | Client IP address |
+| `event_type` | VARCHAR(32) | `upload`, `random_read`, `seed_read`, `dashboard` |
+| `event_date` | DATE | Day of the event (UTC) |
+| `created_at` | DATETIME | Exact time of first occurrence |
+
+**Unique constraint**: `(ip, event_type, event_date)` — `INSERT IGNORE` is used so each IP is counted only once per event type per day.
+
+**Tracked events**:
+- `upload` — `POST /maps` (blueprint uploaded)
+- `random_read` — `GET /maps/random`
+- `seed_read` — `GET /maps/seed/:seed`
+- `dashboard` — any `GET /view/*` page
+
+### analytics_daily_summary
+
+**Purpose**: Cumulative daily unique-user counts for dates older than 30 days. Populated automatically by the cleanup process.
+
+| Column | MySQL type | Notes |
+|--------|-----------|-------|
+| `id` | INT AUTO_INCREMENT | Primary key |
+| `summary_date` | DATE | The calendar day |
+| `category` | VARCHAR(32) | Same values as `analytics_events.event_type` |
+| `unique_count` | INT | Number of distinct IPs on that day |
+
+**Unique constraint**: `(summary_date, category)` — upserted via `ON DUPLICATE KEY UPDATE`.
+
+---
+
 ## Blueprint File Format
 
 Files stored in Spaces are **gzip-compressed XML**. After decompression the structure is:
