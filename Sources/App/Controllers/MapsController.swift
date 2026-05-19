@@ -184,6 +184,7 @@ final class MapsController {
 
     /// Saves a decoded `GameMap` to the database and uploads blueprint to S3.
     func create(_ req: Request) async throws -> GameMap {
+        req.logger.debug("POST /maps: body \(req.body.data?.readableBytes ?? 0) bytes")
         guard let data = req.body.data else {
             throw RealRuinsError.noData()
         }
