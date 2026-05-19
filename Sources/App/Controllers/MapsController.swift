@@ -84,7 +84,7 @@ final class MapsController {
                 """)
             .all(decodingFluent: GameMap.self)
 
-        if let ip = req.remoteAddress?.ipAddress {
+        if let ip = req.realIPAddress {
             await AnalyticsService.record(ip: ip, type: .randomRead, on: req.db)
         }
         return result
@@ -117,7 +117,7 @@ final class MapsController {
             .range(offset..<(offset + limit))
             .all()
 
-        if let ip = req.remoteAddress?.ipAddress {
+        if let ip = req.realIPAddress {
             await AnalyticsService.record(ip: ip, type: .seedRead, on: req.db)
         }
         return result
@@ -207,7 +207,7 @@ final class MapsController {
             savedMap = gameMap
         }
 
-        if let ip = req.remoteAddress?.ipAddress {
+        if let ip = req.realIPAddress {
             await AnalyticsService.record(ip: ip, type: .upload, on: req.db)
         }
         return savedMap
@@ -222,7 +222,7 @@ final class MapsController {
     }
 
     func vote(_ req: Request, voteType: Int) async throws -> HTTPStatus {
-        guard let ip = req.remoteAddress?.ipAddress,
+        guard let ip = req.realIPAddress,
               let mapId = req.parameters.get("id", as: Int.self) else {
             return .badRequest
         }
