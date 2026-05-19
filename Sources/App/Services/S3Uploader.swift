@@ -23,7 +23,7 @@ struct S3Uploader {
         let path = "/\(bucket)/\(key)"
         let urlString = "https://\(host)\(path)"
 
-        logger.info("S3 upload starting: PUT \(urlString) (\(data.readableBytes) bytes)")
+        logger.notice("S3 upload starting: PUT \(urlString) (\(data.readableBytes) bytes)")
 
         let now = Date()
         let amzDate = amzDateString(now)
@@ -90,7 +90,7 @@ struct S3Uploader {
             throw Abort(.internalServerError, reason: "S3 upload failed with HTTP \(statusCode)")
         }
 
-        logger.info("S3 upload succeeded: HTTP \(statusCode) for \(urlString)")
+        logger.notice("S3 upload succeeded: HTTP \(statusCode) for \(urlString)")
     }
 
     // MARK: - AWS Sig V4 helpers
