@@ -30,21 +30,6 @@ struct MapFilter: Content {
 
 
 /// Response structures
-// For map JSON request
-struct GameCell: Content {
-    var x: Int?
-    var y: Int?
-    var terrain: GameObject?
-    var objects: [GameObject] = []
-}
-
-// For map JSON request
-struct GameObject: Content {
-    let def: String
-    let stuffDef: String?
-    let artDesc: String?
-}
-
 // For seed:count request
 struct Seed: Content {
     let seed: String
@@ -99,7 +84,7 @@ final class MapsController {
                 """)
             .all(decodingFluent: GameMap.self)
 
-        if let ip = req.remoteAddress?.ipAddress {
+        if let ip = req.realIPAddress {
             await AnalyticsService.record(ip: ip, type: .randomRead, on: req.db)
         }
         return result
@@ -132,7 +117,7 @@ final class MapsController {
             .range(offset..<(offset + limit))
             .all()
 
-        if let ip = req.remoteAddress?.ipAddress {
+        if let ip = req.realIPAddress {
             await AnalyticsService.record(ip: ip, type: .seedRead, on: req.db)
         }
         return result
@@ -222,7 +207,7 @@ final class MapsController {
             savedMap = gameMap
         }
 
-        if let ip = req.remoteAddress?.ipAddress {
+        if let ip = req.realIPAddress {
             await AnalyticsService.record(ip: ip, type: .upload, on: req.db)
         }
         return savedMap
@@ -237,7 +222,7 @@ final class MapsController {
     }
 
     func vote(_ req: Request, voteType: Int) async throws -> HTTPStatus {
-        guard let ip = req.remoteAddress?.ipAddress,
+        guard let ip = req.realIPAddress,
               let mapId = req.parameters.get("id", as: Int.self) else {
             return .badRequest
         }
@@ -253,112 +238,6 @@ final class MapsController {
         let newVote = Vote(mapId: mapId, ip: ip, voteType: voteType)
         try await newVote.save(on: req.db)
         return .ok
-    }
-}
-
-/// Returning map data in JSON format
-extension MapsController {
-
-    func json(_ req: Request) async throws -> [[GameCell]] {
-        guard let mapId = req.parameters.get("id", as: Int.self) else {
-            throw RealRuinsError.invalidParameters("No ID provided")
-        }
-
-        guard let gameMap = try await GameMap.find(mapId, on: req.db) else {
-            throw RealRuinsError.invalidParameters("Map not found")
-        }
-
-        let fullName = "https://realruinsv2.sfo2.digitaloceanspaces.com/\(gameMap.nameInBucket).bp"
-        let response = try await req.client.get(URI(string: fullName))
-
-        guard let bodyBuffer = response.body else {
-            throw RealRuinsError.noData()
-        }
-        let blueprintData = Data(buffer: bodyBuffer)
-
-        guard let unzipped = try? blueprintData.gunzipped() else {
-            throw RealRuinsError.malformedBlueprintGZIP()
-        }
-
-        guard let blueprint = try? XMLDocument(data: unzipped, options: []),
-              let root = blueprint.rootElement() else {
-            throw RealRuinsError.malformedBlueprintXML("Can't init XML")
-        }
-
-        guard let blueprintWidth = Int(root.attribute(forName: "width")?.stringValue ?? ""),
-              let blueprintHeight = Int(root.attribute(forName: "height")?.stringValue ?? "") else {
-            throw RealRuinsError.malformedBlueprintXML("No height or width provided")
-        }
-
-        var cells: [[GameCell]] = Array(repeating: Array(repeating: GameCell(), count: blueprintWidth), count: blueprintHeight)
-
-        for node in root.elements(forName: "cell") {
-            if let nodeX = Int(node.attribute(forName: "x")?.stringValue ?? ""),
-               let nodeZ = Int(node.attribute(forName: "z")?.stringValue ?? "") {
-                var gameCell = cells[nodeZ][nodeX]
-                if let terrainDef = node.elements(forName: "terrain").first?.attribute(forName: "def")?.stringValue {
-                    gameCell.terrain = GameObject(def: terrainDef, stuffDef: nil, artDesc: nil)
-                }
-                for item in node.elements(forName: "item") {
-                    if let itemDef = item.attribute(forName: "def")?.stringValue {
-                        let stuffDef = item.attribute(forName: "stuffDef")?.stringValue
-                        gameCell.objects.append(GameObject(def: itemDef, stuffDef: stuffDef, artDesc: ""))
-                    }
-                }
-                cells[nodeZ][nodeX] = gameCell
-            }
-        }
-        return cells
-    }
-
-    func json2(_ req: Request) async throws -> [GameCell] {
-        guard let mapId = req.parameters.get("id", as: Int.self) else {
-            throw RealRuinsError.invalidParameters("No ID provided")
-        }
-
-        guard let gameMap = try await GameMap.find(mapId, on: req.db) else {
-            throw RealRuinsError.invalidParameters("Map not found")
-        }
-
-        let fullName = "https://realruinsv2.sfo2.digitaloceanspaces.com/\(gameMap.nameInBucket).bp"
-        let response = try await req.client.get(URI(string: fullName))
-
-        guard let bodyBuffer = response.body else {
-            throw RealRuinsError.noData()
-        }
-        let blueprintData = Data(buffer: bodyBuffer)
-
-        guard let unzipped = try? blueprintData.gunzipped() else {
-            throw RealRuinsError.malformedBlueprintGZIP()
-        }
-
-        guard let blueprint = try? XMLDocument(data: unzipped, options: []),
-              let root = blueprint.rootElement() else {
-            throw RealRuinsError.malformedBlueprintXML("Can't init XML")
-        }
-
-        var cells: [GameCell] = []
-
-        for node in root.elements(forName: "cell") {
-            if let nodeX = Int(node.attribute(forName: "x")?.stringValue ?? ""),
-               let nodeZ = Int(node.attribute(forName: "z")?.stringValue ?? "") {
-                var gameCell = GameCell()
-                gameCell.x = nodeX
-                gameCell.y = nodeZ
-
-                if let terrainDef = node.elements(forName: "terrain").first?.attribute(forName: "def")?.stringValue {
-                    gameCell.terrain = GameObject(def: terrainDef, stuffDef: nil, artDesc: nil)
-                }
-                for item in node.elements(forName: "item") {
-                    if let itemDef = item.attribute(forName: "def")?.stringValue {
-                        let stuffDef = item.attribute(forName: "stuffDef")?.stringValue
-                        gameCell.objects.append(GameObject(def: itemDef, stuffDef: stuffDef, artDesc: ""))
-                    }
-                }
-                cells.append(gameCell)
-            }
-        }
-        return cells
     }
 }
 

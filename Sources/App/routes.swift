@@ -22,9 +22,6 @@ public func routes(_ app: Application) throws {
     app.get("maps", "topseeds", use: gameMapController.topSeeds)
     app.on(.POST, "maps", body: .stream, use: gameMapController.create)
 
-    app.get("maps", "json", ":id", use: gameMapController.json)
-    app.get("maps", "json2", ":id", use: gameMapController.json2)
-
     app.post("maps", "vote", "remove", ":id", use: gameMapController.voteForRemoval)
     app.post("maps", "vote", "promote", ":id", use: gameMapController.voteForPromotion)
 
