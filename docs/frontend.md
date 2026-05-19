@@ -62,7 +62,10 @@ Context type: `SeedsListContext { seedsList, offset, limit, title }`
 
 Standalone HTML (no `tablebase.leaf`). Rendered by `GET /view/map/:id` and `GET /view/maps/random`.
 
-Fetches `/maps/json2/:id` via Ajax (jQuery, sync) and renders the map on a `<canvas>` element.
+Context type: `MapViewContext { mapId, nameInBucket }`
+
+Fetches the blueprint file directly from DigitalOcean Spaces at
+`https://realruinsv2.sfo2.digitaloceanspaces.com/<nameInBucket>.bp` using the Fetch API, decompresses it with **pako 2.1.0** (loaded from cdnjs CDN), then parses the XML using the browser's built-in `DOMParser` and renders the map on a `<canvas>` element.
 
 **Colour coding**:
 | Colour | Meaning |
@@ -78,7 +81,7 @@ Mouseover tooltip shows terrain def and object defs for the hovered cell.
 
 Voting buttons trigger `POST /maps/vote/remove/:id` and `POST /maps/vote/promote/:id`.
 
-Uses **Bootstrap 3.3.7** + **jQuery 3.3.1**.
+Uses **Bootstrap 3.3.7** + **jQuery 3.3.1** + **pako 2.1.0**.
 
 ---
 
@@ -110,4 +113,3 @@ Shows total number of maps stored.
 
 - All pages load Bootstrap and jQuery from public CDNs — no local assets except the `Public/` directory (which currently appears empty / unused by templates).
 - The `FileMiddleware` serves static files from `Public/` but the Dockerfile has the `COPY Public` line commented out.
-- Synchronous Ajax (`async: false`) in `mapView.leaf` blocks the browser UI during map load — acceptable for a debug tool but poor UX for production.
