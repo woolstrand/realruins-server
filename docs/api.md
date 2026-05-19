@@ -94,6 +94,7 @@ Decompresses the body, parses XML metadata, and either creates a new `GameMap` r
 | Query param | Type | Notes |
 |-------------|------|-------|
 | `gameId` | String (UInt64) | Fallback game ID if not present in the XML |
+| `debug_stage` | Int (0–4) | **Staging only.** Returns HTTP 400 immediately at the named checkpoint to isolate hang points. 0=pre-body-collect, 1=post-body-collect, 2=post-parse, 3=post-DB, 4=post-S3. |
 
 **Response**: `GameMap` (created or updated)
 
