@@ -88,15 +88,17 @@ final class MapsViewController {
     }
 
     func viewRandomMap(_ req: Request) async throws -> View {
-        let gameMap = try await GameMap.query(on: req.db)
+        guard let gameMap = try await GameMap.query(on: req.db)
             .sort(DatabaseQuery.Sort.sort(.custom("RAND()"), .ascending))
-            .first()
+            .first() else {
+            throw RealRuinsError.invalidParameters("No maps available")
+        }
         if let ip = req.remoteAddress?.ipAddress {
             await AnalyticsService.record(ip: ip, type: .dashboard, on: req.db)
         }
         return try await req.view.render("mapView", MapViewContext(
-            mapId: gameMap?.id ?? 0,
-            nameInBucket: gameMap?.nameInBucket ?? ""
+            mapId: gameMap.id ?? 0,
+            nameInBucket: gameMap.nameInBucket
         ))
     }
 
