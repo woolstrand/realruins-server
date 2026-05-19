@@ -184,7 +184,7 @@ final class MapsController {
 
     /// Saves a decoded `GameMap` to the database and uploads blueprint to S3.
     func create(_ req: Request) async throws -> GameMap {
-        req.logger.debug("POST /maps: body \(req.body.data?.readableBytes ?? 0) bytes")
+        req.logger.info("POST /maps: received upload request, body \(req.body.data?.readableBytes ?? 0) bytes")
         guard let data = req.body.data else {
             throw RealRuinsError.noData()
         }
@@ -194,6 +194,8 @@ final class MapsController {
         let rawData = Data(buffer: data)
         let gameMap = try GameMap(blueprintData: rawData, externalGameId: UInt64(gameIdStr?.gameId ?? ""))
 
+        req.logger.info("POST /maps: parsed blueprint — seed=\(gameMap.seed) tileId=\(gameMap.tileId) gameId=\(gameMap.gameId) size=\(gameMap.mapSize) coverage=\(gameMap.coverage)")
+
         let savedMap: GameMap
         if let storedMap = try await GameMap.query(on: req.db)
             .filter(\.$gameId == gameMap.gameId)
@@ -201,22 +203,25 @@ final class MapsController {
             .first() {
 
             // Update existing map
+            req.logger.info("POST /maps: updating existing map id=\(storedMap.id ?? -1) bucket=\(storedMap.nameInBucket)")
             storedMap.updatedAt = Date()
             storedMap.height = gameMap.height
             storedMap.width = gameMap.width
-            try await req.s3Uploader.upload(client: req.client, data: data, fileName: storedMap.nameInBucket)
+            try await req.s3Uploader.upload(client: req.client, data: data, fileName: storedMap.nameInBucket, logger: req.logger)
             try await storedMap.update(on: req.db)
             savedMap = storedMap
 
         } else {
             // Create new map
             let filename = UUID().uuidString
-            try await req.s3Uploader.upload(client: req.client, data: data, fileName: filename)
+            req.logger.info("POST /maps: creating new map bucket=\(filename)")
+            try await req.s3Uploader.upload(client: req.client, data: data, fileName: filename, logger: req.logger)
             gameMap.nameInBucket = filename
             try await gameMap.save(on: req.db)
             savedMap = gameMap
         }
 
+        req.logger.info("POST /maps: upload complete, map id=\(savedMap.id ?? -1)")
         if let ip = req.remoteAddress?.ipAddress {
             await AnalyticsService.record(ip: ip, type: .upload, on: req.db)
         }
