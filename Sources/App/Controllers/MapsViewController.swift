@@ -81,7 +81,7 @@ final class MapsViewController {
         guard let gameMap = try await GameMap.find(mapId, on: req.db) else {
             throw RealRuinsError.invalidParameters("Map not found")
         }
-        if let ip = req.realIpAddress {
+        if let ip = req.realIPAddress {
             await AnalyticsService.record(ip: ip, type: .dashboard, on: req.db)
         }
         return try await req.view.render("mapView", MapViewContext(mapId: mapId, nameInBucket: gameMap.nameInBucket))
