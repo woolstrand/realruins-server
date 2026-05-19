@@ -30,6 +30,11 @@ struct DistributionContext: Encodable {
     let title: String
 }
 
+struct MapViewContext: Encodable {
+    let mapId: Int
+    let nameInBucket: String
+}
+
 // MARK: - Visitors page context types
 
 struct RecentUpload: Encodable {
@@ -73,10 +78,13 @@ final class MapsViewController {
         guard let mapId = req.parameters.get("id", as: Int.self) else {
             throw RealRuinsError.invalidParameters("No ID provided")
         }
+        guard let gameMap = try await GameMap.find(mapId, on: req.db) else {
+            throw RealRuinsError.invalidParameters("Map not found")
+        }
         if let ip = req.remoteAddress?.ipAddress {
             await AnalyticsService.record(ip: ip, type: .dashboard, on: req.db)
         }
-        return try await req.view.render("mapView", ["mapId": mapId])
+        return try await req.view.render("mapView", MapViewContext(mapId: mapId, nameInBucket: gameMap.nameInBucket))
     }
 
     func viewRandomMap(_ req: Request) async throws -> View {
@@ -86,7 +94,10 @@ final class MapsViewController {
         if let ip = req.remoteAddress?.ipAddress {
             await AnalyticsService.record(ip: ip, type: .dashboard, on: req.db)
         }
-        return try await req.view.render("mapView", ["mapId": gameMap?.id ?? 0])
+        return try await req.view.render("mapView", MapViewContext(
+            mapId: gameMap?.id ?? 0,
+            nameInBucket: gameMap?.nameInBucket ?? ""
+        ))
     }
 
     func viewStats(_ req: Request) async throws -> View {

@@ -14,6 +14,7 @@
         <link href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet">
 
         <script type="text/javascript" src="https://code.jquery.com/jquery-3.3.1.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
         <script type="text/javascript">
             
             let cellSize = 10;
@@ -47,22 +48,49 @@
             return "#770000";
         }
         
-        function OnLoad() {
-            
-            
+        async function OnLoad() {
             timeLoadedPage = new Date();
-            let mapId = #(mapId);
+            const nameInBucket = "#(nameInBucket)";
+            const url = "https://realruinsv2.sfo2.digitaloceanspaces.com/" + nameInBucket + ".bp";
             var data = [];
-            
-            $.ajax({
-                   url: '/maps/json2/' + mapId,
-                   async: false,
-                   dataType: 'json',
-                   success: function (response) {
-                   data = response
-                   timeLoadedData = new Date();
-                   }
-                   });
+
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error("HTTP " + response.status);
+                const buffer = await response.arrayBuffer();
+                const decompressed = pako.inflate(new Uint8Array(buffer));
+                const xmlStr = new TextDecoder("utf-8").decode(decompressed);
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(xmlStr, "text/xml");
+
+                const cells = xmlDoc.querySelectorAll("cell");
+                for (const cell of cells) {
+                    const x = parseInt(cell.getAttribute("x"), 10);
+                    const y = parseInt(cell.getAttribute("z"), 10);
+                    if (isNaN(x) || isNaN(y)) continue;
+                    const cellData = { x: x, y: y, terrain: undefined, objects: [] };
+
+                    const terrain = cell.querySelector("terrain");
+                    if (terrain) {
+                        cellData.terrain = { def: terrain.getAttribute("def") };
+                    }
+
+                    const items = cell.querySelectorAll("item");
+                    for (const item of items) {
+                        const def = item.getAttribute("def");
+                        if (def) {
+                            const stuffDef = item.getAttribute("stuffDef") || undefined;
+                            cellData.objects.push({ def: def, stuffDef: stuffDef });
+                        }
+                    }
+                    data.push(cellData);
+                }
+            } catch (e) {
+                $('#stats').html("Error loading map: " + e.message);
+                return;
+            }
+
+            timeLoadedData = new Date();
                    
                    var maxX = 0;
                    var maxY = 0;
@@ -94,7 +122,6 @@
                                color = colorByItem(item);
                                ctx.fillStyle = color;
                                ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
-                           //$('#map').append('<div style="width: 10px; height: 10px; left: ' + (x*cellSize) + 'px; top: ' + (y*cellSize) + 'px; position: absolute; background: ' + color + ';">&nbsp;</div>');
                            }
                        }
                    }

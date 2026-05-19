@@ -102,25 +102,13 @@ Decompresses the body, parses XML metadata, and either creates a new `GameMap` r
 
 ### Get map as 2D JSON grid
 
-```
-GET /maps/json/:id
-```
-
-Fetches the blueprint from Spaces, decompresses it, parses the XML, and returns a 2D array of `GameCell` objects (row-major, indexed by `[z][x]`).
-
-**Response**: `[[GameCell]]`
+> **Removed.** This endpoint has been deleted. The map view page now fetches the blueprint directly from DigitalOcean Spaces and performs decompression and XML parsing in the browser.
 
 ---
 
 ### Get map as flat JSON array
 
-```
-GET /maps/json2/:id
-```
-
-Same as above but returns a flat array of `GameCell` objects, each with explicit `x` and `y` fields. Preferred by the web UI.
-
-**Response**: `[GameCell]`
+> **Removed.** This endpoint has been deleted. The map view page now fetches the blueprint directly from DigitalOcean Spaces and performs decompression and XML parsing in the browser.
 
 ---
 
@@ -189,20 +177,6 @@ All web routes render Leaf templates and return HTML.
 ```
 
 Blueprint file URL: `https://realruinsv2.sfo2.digitaloceanspaces.com/<nameInBucket>.bp`
-
-### GameCell
-
-```json
-{
-  "x": 5,
-  "y": 12,
-  "terrain": { "def": "Gravel", "stuffDef": null, "artDesc": null },
-  "objects": [
-    { "def": "Wall", "stuffDef": "Steel", "artDesc": "" },
-    { "def": "Door", "stuffDef": null, "artDesc": "" }
-  ]
-}
-```
 
 ### Seed
 
