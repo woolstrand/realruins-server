@@ -63,7 +63,7 @@ struct VisitorsContext: Encodable {
 final class MapsViewController {
 
     func index(_ req: Request) async throws -> View {
-        if let ip = req.remoteAddress?.ipAddress {
+        if let ip = req.realIPAddress {
             await AnalyticsService.record(ip: ip, type: .dashboard, on: req.db)
         }
         return try await req.view.render("index")
@@ -73,7 +73,7 @@ final class MapsViewController {
         guard let mapId = req.parameters.get("id", as: Int.self) else {
             throw RealRuinsError.invalidParameters("No ID provided")
         }
-        if let ip = req.remoteAddress?.ipAddress {
+        if let ip = req.realIPAddress {
             await AnalyticsService.record(ip: ip, type: .dashboard, on: req.db)
         }
         return try await req.view.render("mapView", ["mapId": mapId])
@@ -83,7 +83,7 @@ final class MapsViewController {
         let gameMap = try await GameMap.query(on: req.db)
             .sort(DatabaseQuery.Sort.sort(.custom("RAND()"), .ascending))
             .first()
-        if let ip = req.remoteAddress?.ipAddress {
+        if let ip = req.realIPAddress {
             await AnalyticsService.record(ip: ip, type: .dashboard, on: req.db)
         }
         return try await req.view.render("mapView", ["mapId": gameMap?.id ?? 0])
@@ -91,7 +91,7 @@ final class MapsViewController {
 
     func viewStats(_ req: Request) async throws -> View {
         let count = try await GameMap.query(on: req.db).count()
-        if let ip = req.remoteAddress?.ipAddress {
+        if let ip = req.realIPAddress {
             await AnalyticsService.record(ip: ip, type: .dashboard, on: req.db)
         }
         return try await req.view.render("stats", ["total": "\(count)"])
@@ -125,7 +125,7 @@ final class MapsViewController {
             .range(offset..<(offset + limit))
             .all()
 
-        if let ip = req.remoteAddress?.ipAddress {
+        if let ip = req.realIPAddress {
             await AnalyticsService.record(ip: ip, type: .dashboard, on: req.db)
         }
 
@@ -148,7 +148,7 @@ final class MapsViewController {
         let offset = limitObj?.offset ?? 0
         let limit = limitObj?.limit ?? 50
 
-        if let ip = req.remoteAddress?.ipAddress {
+        if let ip = req.realIPAddress {
             await AnalyticsService.record(ip: ip, type: .dashboard, on: req.db)
         }
 
@@ -191,7 +191,7 @@ final class MapsViewController {
             }
         }
 
-        if let ip = req.remoteAddress?.ipAddress {
+        if let ip = req.realIPAddress {
             await AnalyticsService.record(ip: ip, type: .dashboard, on: req.db)
         }
 
