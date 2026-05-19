@@ -111,7 +111,9 @@ final class GameMap: Model, Content {
     /// or truncated XML are rejected with a `.badRequest` error and never reach
     /// the database — even when the header attributes were readable.
     init(blueprintData: ByteBuffer, externalGameId: UInt64?) throws {
-        // Convert ByteBuffer → Data once, for gunzip only.
+        // One unavoidable Data copy: GzipSwift's gunzipped() operates on Data.
+        // The old code had two copies (rawData in the controller + this one);
+        // accepting ByteBuffer here collapses it to one.
         let compressedData = Data(buffer: blueprintData)
 
         let unzipped: Data
@@ -132,8 +134,9 @@ final class GameMap: Model, Content {
         let parseOK = xmlParser.parse()
 
         guard parseOK else {
-            let detail = xmlParser.parserError.map { " (\($0.localizedDescription))" } ?? ""
-            throw RealRuinsError.malformedBlueprintXML("Corrupted or truncated blueprint XML\(detail)")
+            let location = "line \(xmlParser.lineNumber):\(xmlParser.columnNumber)"
+            let detail = xmlParser.parserError.map { " — \($0.localizedDescription)" } ?? ""
+            throw RealRuinsError.malformedBlueprintXML("Corrupted or truncated blueprint XML at \(location)\(detail)")
         }
 
         guard let blueprintWidth = Int(extractor.rootAttributes["width"] ?? ""),
