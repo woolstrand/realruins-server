@@ -184,16 +184,39 @@ final class MapsController {
 
     /// Saves a decoded `GameMap` to the database and uploads blueprint to S3.
     func create(_ req: Request) async throws -> GameMap {
-        req.logger.info("POST /maps: received upload request, collecting body")
+        // ── Debug escape-hatch ────────────────────────────────────────────────
+        // Append ?debug_stage=N to any upload request to isolate where execution
+        // hangs.  Each stage returns HTTP 400 with a message the moment it is
+        // reached, so the first stage that *does not* return proves the hang
+        // point.  Remove (or ignore) once the root cause is confirmed.
+        //
+        //   0  handler reached — before body collection
+        //   1  body collected
+        //   2  blueprint parsed
+        //   3  DB query completed
+        //   4  S3 upload completed
+        struct DebugQuery: Content {
+            var debugStage: Int?
+            enum CodingKeys: String, CodingKey { case debugStage = "debug_stage" }
+        }
+        let debugStage = (try? req.query.decode(DebugQuery.self))?.debugStage
+
+        if debugStage == 0 {
+            throw Abort(.badRequest, reason: "debug_stage=0: handler reached (body not yet collected)")
+        }
 
         // Collect the body explicitly in the async handler context (rather than
         // at the route-dispatch level on the NIO event loop).  This ensures that
         // Vapor's request-logger middleware runs *before* body collection, so any
         // hang during collection is visible in the logs.  The 50 MB cap is well
         // above the largest expected blueprint file.
+        req.logger.notice("POST /maps: collecting body")
         let bodyBuffer = try await req.body.collect(upTo: 50 * 1024 * 1024)
+        req.logger.notice("POST /maps: body collected (\(bodyBuffer.readableBytes) bytes)")
 
-        req.logger.info("POST /maps: body collected, \(bodyBuffer.readableBytes) bytes")
+        if debugStage == 1 {
+            throw Abort(.badRequest, reason: "debug_stage=1: body collected (\(bodyBuffer.readableBytes) bytes)")
+        }
 
         guard bodyBuffer.readableBytes > 0 else {
             throw RealRuinsError.noData()
@@ -204,34 +227,57 @@ final class MapsController {
         let rawData = Data(buffer: bodyBuffer)
         let gameMap = try GameMap(blueprintData: rawData, externalGameId: UInt64(gameIdStr?.gameId ?? ""))
 
-        req.logger.info("POST /maps: parsed blueprint — seed=\(gameMap.seed) tileId=\(gameMap.tileId) gameId=\(gameMap.gameId) size=\(gameMap.mapSize) coverage=\(gameMap.coverage)")
+        req.logger.notice("POST /maps: parsed blueprint — seed=\(gameMap.seed) tileId=\(gameMap.tileId) gameId=\(gameMap.gameId) size=\(gameMap.mapSize) coverage=\(gameMap.coverage)")
 
-        let savedMap: GameMap
-        if let storedMap = try await GameMap.query(on: req.db)
+        if debugStage == 2 {
+            throw Abort(.badRequest, reason: "debug_stage=2: blueprint parsed (seed=\(gameMap.seed) tileId=\(gameMap.tileId))")
+        }
+
+        let dbResult = try await GameMap.query(on: req.db)
             .filter(\.$gameId == gameMap.gameId)
             .filter(\.$tileId == gameMap.tileId)
-            .first() {
+            .first()
 
+        req.logger.notice("POST /maps: DB query done (found existing=\(dbResult != nil))")
+
+        if debugStage == 3 {
+            throw Abort(.badRequest, reason: "debug_stage=3: DB query done (found existing=\(dbResult != nil))")
+        }
+
+        let savedMap: GameMap
+        if let storedMap = dbResult {
             // Update existing map
-            req.logger.info("POST /maps: updating existing map id=\(storedMap.id ?? -1) bucket=\(storedMap.nameInBucket)")
+            req.logger.notice("POST /maps: updating existing map id=\(storedMap.id ?? -1) bucket=\(storedMap.nameInBucket)")
             storedMap.updatedAt = Date()
             storedMap.height = gameMap.height
             storedMap.width = gameMap.width
             try await req.s3Uploader.upload(client: req.client, data: bodyBuffer, fileName: storedMap.nameInBucket, logger: req.logger)
+            req.logger.notice("POST /maps: S3 upload done (update path)")
+
+            if debugStage == 4 {
+                throw Abort(.badRequest, reason: "debug_stage=4: S3 upload done (update path, map id=\(storedMap.id ?? -1))")
+            }
+
             try await storedMap.update(on: req.db)
             savedMap = storedMap
 
         } else {
             // Create new map
             let filename = UUID().uuidString
-            req.logger.info("POST /maps: creating new map bucket=\(filename)")
+            req.logger.notice("POST /maps: creating new map bucket=\(filename)")
             try await req.s3Uploader.upload(client: req.client, data: bodyBuffer, fileName: filename, logger: req.logger)
+            req.logger.notice("POST /maps: S3 upload done (create path)")
+
+            if debugStage == 4 {
+                throw Abort(.badRequest, reason: "debug_stage=4: S3 upload done (create path)")
+            }
+
             gameMap.nameInBucket = filename
             try await gameMap.save(on: req.db)
             savedMap = gameMap
         }
 
-        req.logger.info("POST /maps: upload complete, map id=\(savedMap.id ?? -1)")
+        req.logger.notice("POST /maps: upload complete, map id=\(savedMap.id ?? -1)")
         if let ip = req.remoteAddress?.ipAddress {
             await AnalyticsService.record(ip: ip, type: .upload, on: req.db)
         }
