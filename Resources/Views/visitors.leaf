@@ -3,6 +3,7 @@
 <head>
 <title>Visitors Analytics</title>
 <link href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
   .stat-value { font-size: 1.6em; font-weight: bold; }
   .panel-heading h3 { margin: 0; }
@@ -20,12 +21,12 @@
       <div class="panel-heading"><h3>Today — API Users</h3></div>
       <div class="panel-body">
         <table class="table table-condensed table-bordered">
-          <thead><tr><th>Category</th><th class="text-right">Unique IPs</th></tr></thead>
+          <thead><tr><th>Category</th><th class="text-right">Unique IPs</th><th class="text-right">Requests</th></tr></thead>
           <tbody>
-            <tr><td>Uploaders</td><td class="text-right stat-value">#(dailyUploaders)</td></tr>
-            <tr><td>Random readers</td><td class="text-right stat-value">#(dailyRandomReaders)</td></tr>
-            <tr><td>Planetary ruins readers</td><td class="text-right stat-value">#(dailySeedReaders)</td></tr>
-            <tr class="active"><td><strong>Total API</strong></td><td class="text-right stat-value"><strong>#(dailyApiTotal)</strong></td></tr>
+            <tr><td>Uploaders</td><td class="text-right stat-value">#(dailyUploaders)</td><td class="text-right">#(dailyUploaderRequests)</td></tr>
+            <tr><td>Random readers</td><td class="text-right stat-value">#(dailyRandomReaders)</td><td class="text-right">#(dailyRandomReaderRequests)</td></tr>
+            <tr><td>Planetary ruins readers</td><td class="text-right stat-value">#(dailySeedReaders)</td><td class="text-right">#(dailySeedReaderRequests)</td></tr>
+            <tr class="active"><td><strong>Total API</strong></td><td class="text-right stat-value"><strong>#(dailyApiTotal)</strong></td><td class="text-right"><strong>#(dailyApiTotalRequests)</strong></td></tr>
           </tbody>
         </table>
       </div>
@@ -38,9 +39,9 @@
       <div class="panel-heading"><h3>Today — Dashboard Users</h3></div>
       <div class="panel-body">
         <table class="table table-condensed table-bordered">
-          <thead><tr><th>Category</th><th class="text-right">Unique IPs</th></tr></thead>
+          <thead><tr><th>Category</th><th class="text-right">Unique IPs</th><th class="text-right">Requests</th></tr></thead>
           <tbody>
-            <tr><td>Dashboard visitors</td><td class="text-right stat-value">#(dailyDashboard)</td></tr>
+            <tr><td>Dashboard visitors</td><td class="text-right stat-value">#(dailyDashboard)</td><td class="text-right">#(dailyDashboardRequests)</td></tr>
           </tbody>
         </table>
       </div>
@@ -55,12 +56,12 @@
       <div class="panel-heading"><h3>Last 30 Days — API Users</h3></div>
       <div class="panel-body">
         <table class="table table-condensed table-bordered">
-          <thead><tr><th>Category</th><th class="text-right">Unique IPs</th></tr></thead>
+          <thead><tr><th>Category</th><th class="text-right">Unique IPs</th><th class="text-right">Requests</th></tr></thead>
           <tbody>
-            <tr><td>Uploaders</td><td class="text-right stat-value">#(monthlyUploaders)</td></tr>
-            <tr><td>Random readers</td><td class="text-right stat-value">#(monthlyRandomReaders)</td></tr>
-            <tr><td>Planetary ruins readers</td><td class="text-right stat-value">#(monthlySeedReaders)</td></tr>
-            <tr class="active"><td><strong>Total API</strong></td><td class="text-right stat-value"><strong>#(monthlyApiTotal)</strong></td></tr>
+            <tr><td>Uploaders</td><td class="text-right stat-value">#(monthlyUploaders)</td><td class="text-right">#(monthlyUploaderRequests)</td></tr>
+            <tr><td>Random readers</td><td class="text-right stat-value">#(monthlyRandomReaders)</td><td class="text-right">#(monthlyRandomReaderRequests)</td></tr>
+            <tr><td>Planetary ruins readers</td><td class="text-right stat-value">#(monthlySeedReaders)</td><td class="text-right">#(monthlySeedReaderRequests)</td></tr>
+            <tr class="active"><td><strong>Total API</strong></td><td class="text-right stat-value"><strong>#(monthlyApiTotal)</strong></td><td class="text-right"><strong>#(monthlyApiTotalRequests)</strong></td></tr>
           </tbody>
         </table>
       </div>
@@ -73,15 +74,111 @@
       <div class="panel-heading"><h3>Last 30 Days — Dashboard Users</h3></div>
       <div class="panel-body">
         <table class="table table-condensed table-bordered">
-          <thead><tr><th>Category</th><th class="text-right">Unique IPs</th></tr></thead>
+          <thead><tr><th>Category</th><th class="text-right">Unique IPs</th><th class="text-right">Requests</th></tr></thead>
           <tbody>
-            <tr><td>Dashboard visitors</td><td class="text-right stat-value">#(monthlyDashboard)</td></tr>
+            <tr><td>Dashboard visitors</td><td class="text-right stat-value">#(monthlyDashboard)</td><td class="text-right">#(monthlyDashboardRequests)</td></tr>
           </tbody>
         </table>
       </div>
     </div>
   </div>
 </div>
+
+<!-- Daily Users & Requests Graph -->
+<div class="row">
+  <div class="col-xs-12">
+    <div class="panel panel-default">
+      <div class="panel-heading"><h3>Daily Users &amp; Requests — Last 30 Days</h3></div>
+      <div class="panel-body">
+        <canvas id="dailyChart" height="80"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var labels   = [#unsafeHTML(chartLabelsJS)];
+  var users    = [#(chartUsersJS)];
+  var requests = [#(chartRequestsJS)];
+
+  var ctx = document.getElementById('dailyChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: 'Unique Users',
+          data: users,
+          borderColor: 'rgb(54, 162, 235)',
+          backgroundColor: 'rgba(54, 162, 235, 0.1)',
+          tension: 0.2,
+          yAxisID: 'yUsers'
+        },
+        {
+          label: 'Total Requests',
+          data: requests,
+          borderColor: 'rgb(255, 99, 132)',
+          backgroundColor: 'rgba(255, 99, 132, 0.1)',
+          tension: 0.2,
+          yAxisID: 'yRequests'
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        yUsers: {
+          type: 'linear',
+          position: 'left',
+          title: { display: true, text: 'Unique Users' },
+          beginAtZero: true
+        },
+        yRequests: {
+          type: 'linear',
+          position: 'right',
+          title: { display: true, text: 'Total Requests' },
+          beginAtZero: true,
+          grid: { drawOnChartArea: false }
+        }
+      }
+    }
+  });
+})();
+</script>
+
+<!-- Top 10 IPs by Requests Today -->
+#if(count(topIPGroups) > 0):
+<h2>Top 10 IPs by Requests Today</h2>
+<p class="text-muted">
+  <span class="label label-warning">Yellow</span> = &gt;2× group average (≥5 requests) &nbsp;
+  <span class="label label-danger">Red</span> = &gt;3× group average (≥5 requests)
+</p>
+<div class="row">
+  #for(group in topIPGroups):
+  <div class="col-sm-6">
+    <div class="panel panel-default">
+      <div class="panel-heading"><h3>#(group.categoryLabel)</h3></div>
+      <div class="panel-body">
+        <table class="table table-condensed table-bordered">
+          <thead><tr><th>IP Address</th><th class="text-right">Requests Today</th></tr></thead>
+          <tbody>
+            #for(entry in group.entries):
+            <tr class="#(entry.rowClass)">
+              <td><code>#(entry.ip)</code></td>
+              <td class="text-right">#(entry.requestCount)</td>
+            </tr>
+            #endfor
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  #endfor
+</div>
+#endif
 
 <!-- Ten Recent Uploads -->
 <div class="row">
