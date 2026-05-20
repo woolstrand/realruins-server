@@ -65,8 +65,9 @@ Both analytics tables are created automatically at server startup via `CREATE TA
 | `event_type` | VARCHAR(32) | `upload`, `random_read`, `seed_read`, `dashboard` |
 | `event_date` | DATE | Day of the event (UTC) |
 | `created_at` | DATETIME | Exact time of first occurrence |
+| `request_count` | INT DEFAULT 1 | Total requests from this IP for this event type on this day |
 
-**Unique constraint**: `(ip, event_type, event_date)` — `INSERT IGNORE` is used so each IP is counted only once per event type per day.
+**Unique constraint**: `(ip, event_type, event_date)` — `INSERT … ON DUPLICATE KEY UPDATE request_count = request_count + 1` increments the counter on each new request from the same IP.
 
 **Tracked events**:
 - `upload` — `POST /maps` (blueprint uploaded)
@@ -74,9 +75,11 @@ Both analytics tables are created automatically at server startup via `CREATE TA
 - `seed_read` — `GET /maps/seed/:seed`
 - `dashboard` — any `GET /view/*` page
 
+**Schema migration**: on startup `AnalyticsService.ensureTables` runs `ALTER TABLE analytics_events ADD COLUMN request_count INT NOT NULL DEFAULT 1` (existing rows are set to 1 by the DEFAULT). The error for "duplicate column" is silently swallowed so the migration is idempotent.
+
 ### analytics_daily_summary
 
-**Purpose**: Cumulative daily unique-user counts for dates older than 30 days. Populated automatically by the cleanup process.
+**Purpose**: Cumulative daily unique-user counts and total request counts for dates older than 30 days. Populated automatically by the cleanup process.
 
 | Column | MySQL type | Notes |
 |--------|-----------|-------|
@@ -84,6 +87,7 @@ Both analytics tables are created automatically at server startup via `CREATE TA
 | `summary_date` | DATE | The calendar day |
 | `category` | VARCHAR(32) | Same values as `analytics_events.event_type` |
 | `unique_count` | INT | Number of distinct IPs on that day |
+| `request_count` | INT DEFAULT 0 | Total requests summed across all IPs on that day |
 
 **Unique constraint**: `(summary_date, category)` — upserted via `ON DUPLICATE KEY UPDATE`.
 
