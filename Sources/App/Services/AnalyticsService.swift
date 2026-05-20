@@ -89,18 +89,10 @@ struct AnalyticsService {
             """).run()
 
         // Migration: add request_count to pre-existing analytics_events rows (default 1).
-        // MySQL error 1060 ("Duplicate column name") means the column already exists — safe to ignore.
-        do {
-            try await sql.raw("""
-                ALTER TABLE analytics_events
-                ADD COLUMN request_count INT NOT NULL DEFAULT 1
-                """).run()
-        } catch {
-            let desc = "\(error)"
-            guard desc.contains("1060") || desc.lowercased().contains("duplicate column") else {
-                throw error
-            }
-        }
+        try await addColumnIfNotExists(sql: sql, """
+            ALTER TABLE analytics_events
+            ADD COLUMN request_count INT NOT NULL DEFAULT 1
+            """)
 
         try await sql.raw("""
             CREATE TABLE IF NOT EXISTS analytics_daily_summary (
@@ -115,11 +107,18 @@ struct AnalyticsService {
             """).run()
 
         // Migration: add request_count to pre-existing analytics_daily_summary rows.
+        try await addColumnIfNotExists(sql: sql, """
+            ALTER TABLE analytics_daily_summary
+            ADD COLUMN request_count INT NOT NULL DEFAULT 0
+            """)
+    }
+
+    /// Runs an `ALTER TABLE … ADD COLUMN` statement, silently ignoring MySQL error 1060
+    /// ("Duplicate column name") which indicates the column already exists.
+    /// Any other error is re-thrown.
+    private static func addColumnIfNotExists(sql: SQLDatabase, _ statement: SQLQueryString) async throws {
         do {
-            try await sql.raw("""
-                ALTER TABLE analytics_daily_summary
-                ADD COLUMN request_count INT NOT NULL DEFAULT 0
-                """).run()
+            try await sql.raw(statement).run()
         } catch {
             let desc = "\(error)"
             guard desc.contains("1060") || desc.lowercased().contains("duplicate column") else {

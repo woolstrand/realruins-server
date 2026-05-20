@@ -90,7 +90,8 @@
     <div class="panel panel-default">
       <div class="panel-heading"><h3>Daily Users &amp; Requests — Last 30 Days</h3></div>
       <div class="panel-body">
-        <canvas id="dailyChart" height="80" data-chart="#(chartDataAttr)"></canvas>
+        <canvas id="dailyChart" height="80" data-chart="#(chartDataAttr)"
+                aria-label="Daily users and requests chart for the last 30 days" role="img"></canvas>
       </div>
     </div>
   </div>
