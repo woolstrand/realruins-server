@@ -111,7 +111,7 @@ Context type: `VisitorsContext` — see `MapsViewController.swift`.
 
 **Summary tables** — four Bootstrap panels (Today API, Today Dashboard, Last-30-Days API, Last-30-Days Dashboard). Each table now has three columns: Category, Unique IPs, and Requests.
 
-**Chart** — a Chart.js 4 dual-Y-axis line chart showing daily unique users (left axis) and total requests (right axis) for the last 30 days. Chart data is passed from the controller as pre-built JS array literals (`chartLabelsJS`, `chartUsersJS`, `chartRequestsJS`) and emitted raw via `#unsafeHTML`.
+**Chart** — a Chart.js 4 dual-Y-axis line chart showing daily unique users (left axis) and total requests (right axis) for the last 30 days. Chart data is passed from the controller as a single pipe-delimited string in a `data-chart` attribute (`chartDataAttr`, format: `YYYY-MM-DD|users|requests,...`), then parsed by client-side JavaScript — no `#unsafeHTML` required.
 
 **Top 10 IPs by requests** — one Bootstrap panel per event-type group (Uploaders, Random Readers, Seed Readers, Dashboard Visitors) showing today's top 10 IPs sorted by `request_count`. Rows with anomalously high counts are highlighted:
 - Bootstrap `warning` (yellow background) — >2× group average and ≥5 requests.

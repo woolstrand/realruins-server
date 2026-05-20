@@ -89,13 +89,17 @@ struct AnalyticsService {
             """).run()
 
         // Migration: add request_count to pre-existing analytics_events rows (default 1).
+        // MySQL error 1060 ("Duplicate column name") means the column already exists — safe to ignore.
         do {
             try await sql.raw("""
                 ALTER TABLE analytics_events
                 ADD COLUMN request_count INT NOT NULL DEFAULT 1
                 """).run()
         } catch {
-            // Error 1060 = "Duplicate column name" — column already exists, safe to ignore.
+            let desc = "\(error)"
+            guard desc.contains("1060") || desc.lowercased().contains("duplicate column") else {
+                throw error
+            }
         }
 
         try await sql.raw("""
@@ -117,7 +121,10 @@ struct AnalyticsService {
                 ADD COLUMN request_count INT NOT NULL DEFAULT 0
                 """).run()
         } catch {
-            // Error 1060 = "Duplicate column name" — column already exists, safe to ignore.
+            let desc = "\(error)"
+            guard desc.contains("1060") || desc.lowercased().contains("duplicate column") else {
+                throw error
+            }
         }
     }
 

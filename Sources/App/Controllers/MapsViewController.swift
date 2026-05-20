@@ -75,10 +75,8 @@ struct VisitorsContext: Encodable {
     let monthlyDashboardRequests: Int
     // Recent uploads
     let recentUploads: [RecentUpload]
-    // Chart data — pre-built JS array contents (comma-separated, no surrounding brackets)
-    let chartLabelsJS: String
-    let chartUsersJS: String
-    let chartRequestsJS: String
+    // Chart data — pipe-delimited string embedded in a data attribute ("date|users|requests,...")
+    let chartDataAttr: String
     // Top IPs per event-type group (today)
     let topIPGroups: [TopIPGroup]
 }
@@ -266,11 +264,11 @@ final class MapsViewController {
             )
         }
 
-        // Build Chart.js-ready JS array contents.  Single-quoted date strings are safe
-        // because YYYY-MM-DD contains no HTML-special characters.
-        let chartLabelsJS  = breakdown.map { "'\($0.dateStr)'" }.joined(separator: ",")
-        let chartUsersJS   = breakdown.map { "\($0.uniqueCount)" }.joined(separator: ",")
-        let chartReqJS     = breakdown.map { "\($0.requestCount)" }.joined(separator: ",")
+        // Build chart data as a single pipe-delimited string embedded in a data attribute.
+        // Format: "YYYY-MM-DD|users|requests,YYYY-MM-DD|users|requests,..."
+        // All characters used (digits, hyphens, pipes, commas) are HTML-safe so no
+        // raw/unsafe output is needed in the Leaf template.
+        let chartDataAttr = breakdown.map { "\($0.dateStr)|\($0.uniqueCount)|\($0.requestCount)" }.joined(separator: ",")
 
         let context = VisitorsContext(
             todayStr:                    todayFormatter.string(from: Date()),
@@ -295,9 +293,7 @@ final class MapsViewController {
             monthlyApiTotalRequests:     monthly.apiTotalRequests,
             monthlyDashboardRequests:    monthly.dashboardRequests,
             recentUploads:               recentUploads,
-            chartLabelsJS:               chartLabelsJS,
-            chartUsersJS:                chartUsersJS,
-            chartRequestsJS:             chartReqJS,
+            chartDataAttr:               chartDataAttr,
             topIPGroups:                 topIPGroups
         )
 

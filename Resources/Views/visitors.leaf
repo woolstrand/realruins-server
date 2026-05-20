@@ -90,7 +90,7 @@
     <div class="panel panel-default">
       <div class="panel-heading"><h3>Daily Users &amp; Requests — Last 30 Days</h3></div>
       <div class="panel-body">
-        <canvas id="dailyChart" height="80"></canvas>
+        <canvas id="dailyChart" height="80" data-chart="#(chartDataAttr)"></canvas>
       </div>
     </div>
   </div>
@@ -98,9 +98,14 @@
 
 <script>
 (function () {
-  var labels   = [#unsafeHTML(chartLabelsJS)];
-  var users    = [#(chartUsersJS)];
-  var requests = [#(chartRequestsJS)];
+  var raw = document.getElementById('dailyChart').getAttribute('data-chart') || '';
+  var rows = raw.split(',').filter(Boolean).map(function (s) {
+    var p = s.split('|');
+    return { date: p[0], users: parseInt(p[1]) || 0, requests: parseInt(p[2]) || 0 };
+  });
+  var labels   = rows.map(function (r) { return r.date; });
+  var users    = rows.map(function (r) { return r.users; });
+  var requests = rows.map(function (r) { return r.requests; });
 
   var ctx = document.getElementById('dailyChart').getContext('2d');
   new Chart(ctx, {
