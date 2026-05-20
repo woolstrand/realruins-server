@@ -49,20 +49,36 @@ struct RecentUpload: Encodable {
 
 struct VisitorsContext: Encodable {
     let todayStr: String
-    // Daily stats
+    // Daily stats — unique IPs
     let dailyUploaders: Int
     let dailyRandomReaders: Int
     let dailySeedReaders: Int
     let dailyApiTotal: Int
     let dailyDashboard: Int
-    // Monthly stats (last 30 days)
+    // Daily stats — request counts
+    let dailyUploaderRequests: Int
+    let dailyRandomReaderRequests: Int
+    let dailySeedReaderRequests: Int
+    let dailyApiTotalRequests: Int
+    let dailyDashboardRequests: Int
+    // Monthly stats (last 30 days) — unique IPs
     let monthlyUploaders: Int
     let monthlyRandomReaders: Int
     let monthlySeedReaders: Int
     let monthlyApiTotal: Int
     let monthlyDashboard: Int
+    // Monthly stats — request counts
+    let monthlyUploaderRequests: Int
+    let monthlyRandomReaderRequests: Int
+    let monthlySeedReaderRequests: Int
+    let monthlyApiTotalRequests: Int
+    let monthlyDashboardRequests: Int
     // Recent uploads
     let recentUploads: [RecentUpload]
+    // Chart data — pipe-delimited string embedded in a data attribute ("date|users|requests,...")
+    let chartDataAttr: String
+    // Top IPs per event-type group (today)
+    let topIPGroups: [TopIPGroup]
 }
 
 final class MapsViewController {
@@ -219,6 +235,8 @@ final class MapsViewController {
     func viewVisitors(_ req: Request) async throws -> View {
         let daily   = (try? await AnalyticsService.dailyStats(on: req.db))   ?? .zero
         let monthly = (try? await AnalyticsService.monthlyStats(on: req.db)) ?? .zero
+        let breakdown = (try? await AnalyticsService.dailyBreakdown(on: req.db)) ?? []
+        let topIPGroups = (try? await AnalyticsService.topIPsToday(on: req.db)) ?? []
 
         // Fetch 10 most recent uploads
         let maps = try await GameMap.query(on: req.db)
@@ -246,19 +264,37 @@ final class MapsViewController {
             )
         }
 
+        // Build chart data as a single pipe-delimited string embedded in a data attribute.
+        // Format: "YYYY-MM-DD|users|requests,YYYY-MM-DD|users|requests,..."
+        // All characters used (digits, hyphens, pipes, commas) are HTML-safe so no
+        // raw/unsafe output is needed in the Leaf template.
+        let chartDataAttr = breakdown.map { "\($0.dateStr)|\($0.uniqueCount)|\($0.requestCount)" }.joined(separator: ",")
+
         let context = VisitorsContext(
-            todayStr:            todayFormatter.string(from: Date()),
-            dailyUploaders:      daily.uploaders,
-            dailyRandomReaders:  daily.randomReaders,
-            dailySeedReaders:    daily.seedReaders,
-            dailyApiTotal:       daily.apiTotal,
-            dailyDashboard:      daily.dashboard,
-            monthlyUploaders:    monthly.uploaders,
-            monthlyRandomReaders: monthly.randomReaders,
-            monthlySeedReaders:  monthly.seedReaders,
-            monthlyApiTotal:     monthly.apiTotal,
-            monthlyDashboard:    monthly.dashboard,
-            recentUploads:       recentUploads
+            todayStr:                    todayFormatter.string(from: Date()),
+            dailyUploaders:              daily.uploaders,
+            dailyRandomReaders:          daily.randomReaders,
+            dailySeedReaders:            daily.seedReaders,
+            dailyApiTotal:               daily.apiTotal,
+            dailyDashboard:              daily.dashboard,
+            dailyUploaderRequests:       daily.uploaderRequests,
+            dailyRandomReaderRequests:   daily.randomReaderRequests,
+            dailySeedReaderRequests:     daily.seedReaderRequests,
+            dailyApiTotalRequests:       daily.apiTotalRequests,
+            dailyDashboardRequests:      daily.dashboardRequests,
+            monthlyUploaders:            monthly.uploaders,
+            monthlyRandomReaders:        monthly.randomReaders,
+            monthlySeedReaders:          monthly.seedReaders,
+            monthlyApiTotal:             monthly.apiTotal,
+            monthlyDashboard:            monthly.dashboard,
+            monthlyUploaderRequests:     monthly.uploaderRequests,
+            monthlyRandomReaderRequests: monthly.randomReaderRequests,
+            monthlySeedReaderRequests:   monthly.seedReaderRequests,
+            monthlyApiTotalRequests:     monthly.apiTotalRequests,
+            monthlyDashboardRequests:    monthly.dashboardRequests,
+            recentUploads:               recentUploads,
+            chartDataAttr:               chartDataAttr,
+            topIPGroups:                 topIPGroups
         )
 
         return try await req.view.render("visitors", context)

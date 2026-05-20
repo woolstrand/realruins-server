@@ -180,8 +180,7 @@ final class MapsController {
 
         // gameId is sent as a String query param to avoid integer overflow issues.
         let gameIdStr = try? req.query.decode(GameId.self)
-        let rawData = Data(buffer: bodyBuffer)
-        let gameMap = try GameMap(blueprintData: rawData, externalGameId: UInt64(gameIdStr?.gameId ?? ""))
+        let gameMap = try GameMap(blueprintData: bodyBuffer, externalGameId: UInt64(gameIdStr?.gameId ?? ""))
 
         let dbResult = try await GameMap.query(on: req.db)
             .filter(\.$gameId == gameMap.gameId)
