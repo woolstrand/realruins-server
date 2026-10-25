@@ -1,0 +1,10 @@
+{
+  "targets": [
+    { "amount": 50, "title": "First milestone" },
+    { "amount": 100, "title": "Second milestone" }
+  ],
+  "statuses": [
+    { "amount": 0, "description": "Getting started" },
+    { "amount": 50, "description": "First milestone reached" }
+  ]
+}

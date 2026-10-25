@@ -13,7 +13,7 @@ RUN swift build -c release && mv `swift build -c release --show-bin-path` /build
 FROM ubuntu:22.04
 ARG env
 RUN apt-get -qq update && apt-get install -y \
-  libicu70 libxml2 libbsd0 libcurl4 libatomic1 \
+  libicu70 libxml2 libbsd0 libcurl4 libatomic1 librsvg2-bin fonts-dejavu-core \
   tzdata \
   && rm -r /var/lib/apt/lists/*
 WORKDIR /app

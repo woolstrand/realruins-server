@@ -7,6 +7,7 @@
 | MySQL | Configurable via env vars (see below) |
 | DigitalOcean Spaces | Bucket and region configurable via env vars (see below) |
 | Log directory | `/var/log/RRServer/` (created on startup if absent) |
+| Patreon progress image | `rsvg-convert` (`librsvg2-bin`) and DejaVu fonts; writable `Public/` directory |
 
 ---
 
@@ -26,6 +27,16 @@ with placeholder fallbacks when variables are not set:
 | `S3_API_SECRET`      | DigitalOcean Spaces secret key | `123456` |
 | `S3_BUCKET`          | Spaces bucket name | `realruinsv2` |
 | `S3_REGION`          | Spaces region (also used to build the endpoint host) | `sfo2` |
+| `PATREON_ACCESS_TOKEN` | Creator OAuth access token with access to campaign data, used only when generating the progress dashboard | Unset; generation returns `error` |
+| `PATREON_CAMPAIGN_ID` | Select a campaign if the creator account has more than one | Unset; requires exactly one campaign |
+
+Edit `Resources/progress-targets.json` to configure the dashboard. It has `targets` entries
+(`amount` in US dollars and `title`) and `statuses` entries (`amount` in US dollars and
+`description`). Target amounts must be positive and unique; status thresholds may be zero.
+The sample values are placeholders. The app reads the file on each generation. Ensure
+`Public/` is writable by the server process and persisted across container restarts if the
+cached PNG must survive restarts; otherwise it returns 404 until generation succeeds.
+Patreon tokens can expire and must be refreshed or replaced by the deployment operator.
 
 For Docker deployments, pass secrets at **runtime** — not at build time — so they are never
 baked into the image:
@@ -41,6 +52,7 @@ docker run -p 80:80 \
   -e S3_API_SECRET=<real-secret> \
   -e S3_BUCKET=realruinsv2 \
   -e S3_REGION=sfo2 \
+  -e PATREON_ACCESS_TOKEN=<creator-access-token> \
   ghcr.io/woolstrand/realruins-server:latest
 ```
 

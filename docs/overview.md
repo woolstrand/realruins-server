@@ -41,7 +41,8 @@ rr-server/
 │   │   │   └── Vote.swift        # Map vote model
 │   │   └── Services/
 │   │       ├── MapsService.swift     # Registered but currently empty stub
-│   │       └── AnalyticsService.swift # Analytics recording, cleanup, and stats queries
+│   │       ├── AnalyticsService.swift # Analytics recording, cleanup, and stats queries
+│   │       └── ProgressDashboard.swift # DB-independent Patreon progress image generator
 │   └── Run/
 │       └── main.swift            # Process entry point
 ├── Resources/Views/              # Leaf HTML templates
@@ -53,7 +54,7 @@ rr-server/
 │   ├── stats.leaf
 │   ├── visitors.leaf
 │   └── tablebase.leaf
-├── Tests/AppTests/               # Minimal test stub (no real tests)
+├── Tests/AppTests/               # Dashboard selection and throttling tests
 ├── Package.swift                 # SPM manifest (swift-tools-version:5.5)
 ├── Dockerfile                    # Docker build (Swift 5.9 builder, Ubuntu 22.04 runtime)
 └── .github/workflows/ci.yml     # GitHub Actions: build/test + Docker push to GHCR
@@ -66,6 +67,8 @@ rr-server/
 3. The raw blueprint bytes are uploaded to DigitalOcean Spaces (bucket `realruinsv2`). The file is stored as `<uuid>.bp`.
 4. Other clients call `GET /maps/random` or `GET /maps/seed/:seed` to retrieve metadata. They then fetch the blueprint file directly from the Spaces CDN URL.
 5. The optional web UI (`/view/*`) renders Leaf templates for human browsing of stored maps.
+6. Separately, `/generateProgressDashboard` fetches Patreon campaign pledge data and writes
+   `Public/progressDashboard.png`, served anonymously as a static image.
 
 ## CI / Build
 

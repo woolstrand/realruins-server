@@ -153,6 +153,17 @@ All web routes render Leaf templates and return HTML.
 
 ---
 
+## Patreon Progress Dashboard
+
+| Route | Response | Description |
+|-------|----------|-------------|
+| `GET /generateProgressDashboard` | JSON `{"status":"generated"}`, `{"status":"throttled"}`, or `{"status":"error"}` | Fetches the creator's monthly Patreon pledge total and regenerates the public image. A successful generation blocks further attempts for 60 seconds, including concurrent requests. Failures return HTTP 500 with `error` and can be retried. |
+| `GET /progressDashboard.png` | PNG (or 404 before first successful generation) | Publicly accessible cached image, served from `Public/`. Reading it never calls Patreon. |
+
+Amounts are rounded to whole US dollars for display; goal and status selection uses the unrounded pledge total. The current status is the highest status with a threshold **strictly below** the total. Reached targets include thresholds equal to the total.
+
+---
+
 ## Response Types
 
 ### GameMap
