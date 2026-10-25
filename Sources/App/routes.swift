@@ -12,6 +12,12 @@ public func routes(_ app: Application) throws {
         return "Hello, world!"
     }
 
+    let progressDashboard = ProgressDashboardService(
+        publicDirectory: app.directory.publicDirectory,
+        resourcesDirectory: app.directory.resourcesDirectory
+    )
+    app.get("generateProgressDashboard", use: progressDashboard.generate)
+
     /// API part
     let gameMapController = MapsController()
     let gameMapViewController = MapsViewController()
