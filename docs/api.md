@@ -161,6 +161,10 @@ All web routes render Leaf templates and return HTML.
 | `GET /progressDashboard.png` | PNG (or 404 before first successful generation) | Publicly accessible cached image, served from `Public/`. Reading it never calls Patreon. |
 
 Amounts are rounded to whole US dollars for display; goal and status selection uses the unrounded pledge total. The current status is the highest status with a threshold **strictly below** the total. Reached targets include thresholds equal to the total.
+The pledge total sums active campaign members' current entitled amounts across all
+Patreon pages, normalized by billing cadence (including annual memberships). The
+creator access token needs `campaigns` and `campaigns.members` access; when the
+account owns one campaign, `PATREON_CAMPAIGN_ID` is not required.
 
 ---
 

@@ -27,8 +27,8 @@ with placeholder fallbacks when variables are not set:
 | `S3_API_SECRET`      | DigitalOcean Spaces secret key | `123456` |
 | `S3_BUCKET`          | Spaces bucket name | `realruinsv2` |
 | `S3_REGION`          | Spaces region (also used to build the endpoint host) | `sfo2` |
-| `PATREON_ACCESS_TOKEN` | Creator OAuth access token with access to campaign data, used only when generating the progress dashboard | Unset; generation returns `error` |
-| `PATREON_CAMPAIGN_ID` | Select a campaign if the creator account has more than one | Unset; requires exactly one campaign |
+| `PATREON_ACCESS_TOKEN` | Creator OAuth access token with `campaigns` and `campaigns.members` access, used only when generating the progress dashboard | Unset; generation returns `error` |
+| `PATREON_CAMPAIGN_ID` | Select a campaign if the creator account has more than one | Unset; automatically uses the sole campaign |
 
 Edit `Resources/progress-targets.json` to configure the dashboard. It has `targets` entries
 (`amount` in US dollars and `title`) and `statuses` entries (`amount` in US dollars and
@@ -37,6 +37,10 @@ The sample values are placeholders. The app reads the file on each generation. E
 `Public/` is writable by the server process and persisted across container restarts if the
 cached PNG must survive restarts; otherwise it returns 404 until generation succeeds.
 Patreon tokens can expire and must be refreshed or replaced by the deployment operator.
+The generator reads active members' current entitlement in cents from the Patreon v2
+members endpoint, divides annual pledges by their billing cadence to obtain a monthly
+equivalent, and follows pagination cursors until all members have been counted. The
+total is a monthly-equivalent pledge estimate, not Patreon's net payout after fees.
 
 For Docker deployments, pass secrets at **runtime** — not at build time — so they are never
 baked into the image:
