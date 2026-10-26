@@ -36,9 +36,11 @@ Edit `Resources/progress-targets.json` to configure the dashboard. It has `targe
 The sample values are placeholders. The app reads the file on each generation. Ensure
 `Public/` is writable by the server process and persisted across container restarts if the
 cached PNG must survive restarts; otherwise it returns 404 until generation succeeds.
-Patreon tokens can expire and must be refreshed or replaced by the deployment operator.
-The generator sums `currently_entitled_amount_cents` of active patrons (paginated) from the Patreon v2
-campaign members endpoint and multiplies it by 0.85 to approximate fees and losses.
+Patreon tokens can expire and must be refreshed or replaced by the deployment operator; this only
+disables the authenticated funding source. Independently, the generator anonymously requests public
+campaign `2186817` and reads its `pledge_sum`. It concurrently retrieves both sources, logs whether
+each succeeded and its amount in cents, selects the lower successful amount, then multiplies it by
+0.85 to approximate fees and losses. Generation fails only if both sources are unavailable.
 
 For Docker deployments, pass secrets at **runtime** — not at build time — so they are never
 baked into the image:
