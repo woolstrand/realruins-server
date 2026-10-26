@@ -53,66 +53,87 @@ struct ProgressDashboard {
         status = config.statuses.filter { $0.amount < amount }.max { $0.amount < $1.amount }
     }
 
+    private var axis: (start: Double, end: Double) {
+        guard let next = next else { return (0, amount) }
+        let lower = previous?.amount ?? 0
+        let gap = next.amount - lower
+        return (previous == nil ? 0 : lower - gap * 0.1, next.amount + gap * 0.1)
+    }
+
     var fraction: Double {
-        guard let next = next else { return 1 }
-        let start = previous?.amount ?? 0
-        return min(1, max(0, (amount - start) / (next.amount - start)))
+        let axis = axis
+        return min(1, max(0, (amount - axis.start) / (axis.end - axis.start)))
+    }
+
+    var barColor: String {
+        let progress = amount / targets[0].amount
+        if progress <= 0.1 { return "#E95C5C" }
+        if progress < 0.7 {
+            return blend((233, 92, 92), (241, 216, 135), fraction: (progress - 0.1) / 0.6)
+        }
+        if progress < 1 {
+            return blend((241, 216, 135), (85, 214, 160), fraction: (progress - 0.7) / 0.3)
+        }
+        return "#55D6A0"
     }
 
     func svg() -> String {
-        let width = 900
-        let goalLines = targets.flatMap { target -> [(text: String, reached: Bool)] in
-            let prefix = target.amount <= amount ? "✓" : "○"
-            return wrapped("\(prefix)  \(target.title) — \(dollars(target.amount))", limit: 67)
-                .map { (text: $0, reached: target.amount <= amount) }
+        let barX = 90
+        let barWidth = 1020
+        let axis = axis
+        func position(_ value: Double) -> Int {
+            barX + Int(Double(barWidth) * ((value - axis.start) / (axis.end - axis.start)))
         }
-        let statusLines = wrapped(status?.description ?? "No current status", limit: 55)
-        let height = 420 + statusLines.count * 31 + goalLines.count * 26
+        let statusLines = captionLines(status?.description ?? "No current status", limit: 90, maxLines: 2)
         var body = """
-        <rect width="900" height="\(height)" fill="#101c2a"/>
-        <rect x="24" y="24" width="852" height="\(height - 48)" rx="20" fill="#1b2d40"/>
-        <text x="62" y="82" fill="#a9c4d9" font-size="22">MONTHLY PATREON SUPPORT</text>
-        <text x="62" y="151" fill="#ffffff" font-size="54" font-weight="bold">\(dollars(amount)) / month</text>
-        <rect x="62" y="186" width="776" height="32" rx="16" fill="#40546a"/>
-        <rect x="62" y="186" width="\(Int(776 * fraction))" height="32" rx="16" fill="#55d6a0"/>
+        <rect width="1200" height="390" fill="#101c2a"/>
+        <rect x="24" y="20" width="1152" height="350" rx="20" fill="#1b2d40"/>
+        <text x="90" y="91" fill="#ffffff" font-size="48" font-weight="300">\(dollars(amount)) <tspan fill="#a9c4d9" font-size="26">/ month</tspan></text>
+        <rect x="\(barX)" y="137" width="\(barWidth)" height="28" rx="14" fill="#40546a"/>
+        <rect x="\(barX)" y="137" width="\(Int(Double(barWidth) * fraction))" height="28" rx="14" fill="\(barColor)"/>
         """
         if let previous = previous {
-            body += """
-            <text x="62" y="255" fill="#55d6a0" font-size="18">✓ \(escape(shortLabel(previous.title))) · \(dollars(previous.amount)) reached</text>
-            """
+            let markerX = position(previous.amount)
+            body += goalCaption(previous, x: markerX, anchor: markerX > barX + barWidth / 2 ? "end" : "start", wide: next == nil)
         }
         if let next = next {
-            body += """
-            <text x="838" y="255" text-anchor="end" fill="#f1d887" font-size="18">NEXT: \(escape(shortLabel(next.title))) · \(dollars(next.amount))</text>
-            """
-        } else {
-            body += """
-            <text x="838" y="255" text-anchor="end" fill="#55d6a0" font-size="18">ALL TARGETS REACHED</text>
-            """
+            body += goalCaption(next, x: position(next.amount), anchor: "end", wide: previous == nil)
         }
-        body += """
-        <text x="62" y="302" fill="#a9c4d9" font-size="17">CURRENT STATUS</text>
-        """
         for (index, line) in statusLines.enumerated() {
             body += """
-            <text x="62" y="\(337 + index * 31)" fill="#ffffff" font-size="23">\(escape(line))</text>
+            <text x="90" y="\(313 + index * 23)" fill="#ffffff" font-size="20" font-style="italic">\(escape(line))</text>
             """
         }
-        let goalsY = 363 + statusLines.count * 31
         body += """
-        <text x="62" y="\(goalsY)" fill="#a9c4d9" font-size="17">TARGETS</text>
+        <text x="90" y="363" fill="#a9c4d9" font-size="14">Amounts are approximate, after subtracting processing fees and taxes. Refreshes daily.</text>
         """
-        for (index, line) in goalLines.enumerated() {
-            body += """
-            <text x="62" y="\(goalsY + 33 + index * 26)" fill="\(line.reached ? "#55d6a0" : "#c6d4df")" font-size="17">\(escape(line.text))</text>
-            """
-        }
         return """
-        <svg xmlns="http://www.w3.org/2000/svg" width="\(width)" height="\(height)" viewBox="0 0 \(width) \(height)">
+        <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="390" viewBox="0 0 1200 390" font-family="DejaVu Sans, sans-serif" font-weight="300">
         \(body)
         </svg>
         """
     }
+
+    private func goalCaption(_ target: ProgressConfig.Target, x: Int, anchor: String, wide: Bool) -> String {
+        var result = """
+        <line x1="\(x)" y1="124" x2="\(x)" y2="180" stroke="#ffffff" stroke-width="3"/>
+        <text x="\(x)" y="210" text-anchor="\(anchor)" fill="#ffffff" font-size="21">\(dollars(target.amount))</text>
+        """
+        for (index, line) in captionLines(target.title, limit: wide ? 64 : 27, maxLines: 3).enumerated() {
+            result += """
+            <text x="\(x)" y="\(234 + index * 21)" text-anchor="\(anchor)" fill="#c6d4df" font-size="17">\(escape(line))</text>
+            """
+        }
+        return result
+    }
+}
+
+private func blend(_ start: (Int, Int, Int), _ end: (Int, Int, Int), fraction: Double) -> String {
+    func channel(_ from: Int, _ to: Int) -> Int {
+        Int((Double(from) + Double(to - from) * fraction).rounded())
+    }
+    return String(format: "#%02X%02X%02X",
+                  channel(start.0, end.0), channel(start.1, end.1), channel(start.2, end.2))
 }
 
 private func dollars(_ value: Double) -> String {
@@ -133,8 +154,12 @@ private func escape(_ value: String) -> String {
         .replacingOccurrences(of: "'", with: "&apos;")
 }
 
-private func shortLabel(_ value: String) -> String {
-    value.count > 22 ? String(value.prefix(21)) + "…" : value
+private func captionLines(_ value: String, limit: Int, maxLines: Int) -> [String] {
+    let lines = wrapped(value, limit: limit)
+    guard lines.count > maxLines else { return lines }
+    var result = Array(lines.prefix(maxLines))
+    result[maxLines - 1] = String(result[maxLines - 1].prefix(limit - 1)) + "…"
+    return result
 }
 
 private func wrapped(_ value: String, limit: Int) -> [String] {

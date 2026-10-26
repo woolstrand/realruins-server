@@ -161,6 +161,16 @@ All web routes render Leaf templates and return HTML.
 | `GET /progressDashboard.png` | PNG (or 404 before first successful generation) | Publicly accessible cached image, served from `Public/`. Reading it never calls Patreon. |
 
 Amounts are rounded to whole US dollars for display; goal and status selection uses the unrounded pledge total. The current status is the highest status with a threshold **strictly below** the total. Reached targets include thresholds equal to the total.
+The 1200×390 image is a wide, heading-free Patreon embed. The bar and white goal
+markers share a monetary axis: before the first goal it starts at $0; between
+goals it spans from 10% of the goal interval below the reached goal to 10%
+above the next goal. The fill always starts at the left edge of this axis.
+After the last goal the axis runs from $0 to the current total, so the bar is
+full and the last goal's marker is positioned relative to that total.
+The solid fill interpolates from red at 10% of the first goal to yellow at 70%
+and green at 100%; below 10% it stays red, and from the first goal onward it
+stays green.
+The image shows the status and an approximation/refresh disclaimer, not a target list.
 The pledge total sums active campaign members' current entitled amounts across all
 Patreon pages, normalized by billing cadence (including annual memberships). The
 creator access token needs `campaigns` and `campaigns.members` access; when the
