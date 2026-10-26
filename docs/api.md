@@ -171,11 +171,9 @@ The solid fill interpolates from red at 10% of the first goal to yellow at 70%
 and green at 100%; below 10% it stays red, and from the first goal onward it
 stays green.
 The image shows the status and an approximation/refresh disclaimer, not a target list.
-The total is the lower successful value from two independent Patreon sources: the authenticated API's
-sum of active members' `currently_entitled_amount_cents`, and the public campaign API's
-`pledge_sum` for campaign `2186817`. Both are monthly amounts in cents and the selected value is
-multiplied by 0.85 to approximate fees and losses. The dashboard still generates when exactly one
-source is available, and returns an error only when both sources fail. The creator access token needs
+The total is the sum of active members' `will_pay_amount_cents` (monthly cents) from the authenticated
+API, excluding members whose `last_charge_status` is set and not `Paid` or `Pending` (pessimistic), multiplied
+by 0.85 to approximate fees and losses. The creator access token needs
 `campaigns` and `campaigns.members` access; when the account owns one campaign,
 `PATREON_CAMPAIGN_ID` is not required.
 
