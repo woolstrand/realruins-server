@@ -226,6 +226,88 @@ struct PatreonMembers: Decodable {
     }
 }
 
+struct PatreonPublicCampaign: Decodable {
+    struct Campaign: Decodable {
+        struct Attributes: Decodable {
+            let pledge_sum: Int?
+        }
+
+        let attributes: Attributes
+    }
+
+    let data: Campaign
+}
+
+private protocol PatreonFundingSource {
+    var name: String { get }
+
+    func fundingCents(for req: Request) async throws -> Int
+}
+
+private struct PatreonMemberFundingSource: PatreonFundingSource {
+    let name = "Patreon member API"
+
+    func fundingCents(for req: Request) async throws -> Int {
+        guard let token = Environment.get("PATREON_ACCESS_TOKEN"), !token.isEmpty else {
+            throw Abort(.internalServerError, reason: "PATREON_ACCESS_TOKEN is not configured")
+        }
+
+        var headers = HTTPHeaders()
+        headers.bearerAuthorization = BearerAuthorization(token: token)
+        let campaigns = try JSONDecoder().decode(
+            PatreonCampaigns.self,
+            from: try await ProgressDashboardService.patreonData(
+                ProgressDashboardService.campaignsURI,
+                req: req,
+                headers: headers
+            )
+        )
+        let campaignID = Environment.get("PATREON_CAMPAIGN_ID")
+        let selected = campaignID == nil ? campaigns.data : campaigns.data.filter { $0.id == campaignID }
+        guard selected.count == 1 else {
+            throw Abort(.badGateway, reason: "Expected one Patreon campaign; configure PATREON_CAMPAIGN_ID if there are multiple")
+        }
+        let id = selected[0].id
+        guard !id.isEmpty, id.allSatisfy(\.isNumber) else {
+            throw Abort(.badGateway, reason: "Patreon returned an invalid campaign ID")
+        }
+
+        var pledgeSum = 0
+        var cursor: String?
+        repeat {
+            let page = try JSONDecoder().decode(
+                PatreonMembers.self,
+                from: try await ProgressDashboardService.patreonData(
+                    ProgressDashboardService.membersURI(campaignID: id, cursor: cursor),
+                    req: req,
+                    headers: headers
+                )
+            )
+            pledgeSum += page.activeCents
+            cursor = page.nextCursor
+        } while cursor != nil
+        return pledgeSum
+    }
+}
+
+private struct PatreonPublicCampaignFundingSource: PatreonFundingSource {
+    let name = "Patreon public campaign API"
+
+    func fundingCents(for req: Request) async throws -> Int {
+        let campaign = try JSONDecoder().decode(
+            PatreonPublicCampaign.self,
+            from: try await ProgressDashboardService.patreonData(
+                ProgressDashboardService.publicCampaignURI,
+                req: req
+            )
+        )
+        guard let pledgeSum = campaign.data.attributes.pledge_sum, pledgeSum >= 0 else {
+            throw Abort(.badGateway, reason: "Patreon public campaign API returned an invalid pledge sum")
+        }
+        return pledgeSum
+    }
+}
+
 /// Share of Patreon's monthly income assumed to reach the creator after fees and losses.
 let patreonPayoutFactor = 0.85
 
@@ -267,43 +349,13 @@ final class ProgressDashboardService {
     func generate(_ req: Request) async -> Response {
         guard await gate.begin() else { return response("throttled") }
         do {
-            guard let token = Environment.get("PATREON_ACCESS_TOKEN"), !token.isEmpty else {
-                throw Abort(.internalServerError, reason: "PATREON_ACCESS_TOKEN is not configured")
-            }
             let config = try JSONDecoder().decode(
                 ProgressConfig.self,
                 from: Data(contentsOf: URL(fileURLWithPath: resourcesDirectory).appendingPathComponent("progress-targets.json"))
             )
             try config.validate()
-            var headers = HTTPHeaders()
-            headers.bearerAuthorization = BearerAuthorization(token: token)
-            let campaigns = try JSONDecoder().decode(
-                PatreonCampaigns.self,
-                from: try await Self.patreonData(
-                    Self.campaignsURI,
-                    req: req, headers: headers
-                )
-            )
-            let campaignID = Environment.get("PATREON_CAMPAIGN_ID")
-            let selected = campaignID == nil ? campaigns.data : campaigns.data.filter { $0.id == campaignID }
-            guard selected.count == 1 else {
-                throw Abort(.badGateway, reason: "Expected one Patreon campaign; configure PATREON_CAMPAIGN_ID if there are multiple")
-            }
-            let id = selected[0].id
-            guard !id.isEmpty, id.allSatisfy(\.isNumber) else {
-                throw Abort(.badGateway, reason: "Patreon returned an invalid campaign ID")
-            }
-            var pledgeSum = 0
-            var cursor: String?
-            repeat {
-                let page = try JSONDecoder().decode(
-                    PatreonMembers.self,
-                    from: try await Self.patreonData(Self.membersURI(campaignID: id, cursor: cursor), req: req, headers: headers)
-                )
-                pledgeSum += page.activeCents
-                cursor = page.nextCursor
-            } while cursor != nil
-            let dashboard = try ProgressDashboard(amount: Double(pledgeSum) / 100 * patreonPayoutFactor, config: config)
+            let fundingCents = try await Self.fundingCents(for: req)
+            let dashboard = try ProgressDashboard(amount: Double(fundingCents) / 100 * patreonPayoutFactor, config: config)
             let svg = dashboard.svg()
             try await Task.detached {
                 try Self.render(svg, to: self.publicDirectory)
@@ -318,6 +370,7 @@ final class ProgressDashboardService {
     }
 
     static let campaignsURI = URI(string: "https://www.patreon.com/api/oauth2/v2/campaigns")
+    static let publicCampaignURI = URI(string: "https://www.patreon.com/api/campaigns/2186817?fields%5Bcampaign%5D=creation_count%2Cmember_count_preference%2Coffers_paid_membership%2Cpaid_member_count%2Cpatron_count%2Cpay_per_name%2Cpledge_sum%2Cshow_earnings%2Cshow_patron_count&json-api-version=1.0&json-api-use-default-includes=false&include=%5B%5D")
 
     static func membersURI(campaignID: String, cursor: String?) -> URI {
         var string = "https://www.patreon.com/api/oauth2/v2/campaigns/\(campaignID)/members"
@@ -328,7 +381,34 @@ final class ProgressDashboardService {
         return URI(string: string)
     }
 
-    private static func patreonData(_ uri: URI, req: Request, headers: HTTPHeaders) async throws -> Data {
+    static func fundingCents(for req: Request) async throws -> Int {
+        let memberSource = PatreonMemberFundingSource()
+        let publicSource = PatreonPublicCampaignFundingSource()
+        async let memberResult = fundingResult(from: memberSource, for: req)
+        async let publicResult = fundingResult(from: publicSource, for: req)
+        let results = await [memberResult, publicResult]
+        let amounts = results.compactMap(\.amount)
+        guard let lowestAmount = amounts.min() else {
+            throw Abort(.badGateway, reason: "Both Patreon funding sources failed")
+        }
+        return lowestAmount
+    }
+
+    private static func fundingResult(
+        from source: PatreonFundingSource,
+        for req: Request
+    ) async -> (amount: Int?, source: String) {
+        do {
+            let amount = try await source.fundingCents(for: req)
+            req.logger.info("\(source.name) funding obtained: \(amount) cents")
+            return (amount, source.name)
+        } catch {
+            req.logger.error("\(source.name) funding unavailable: \(error)")
+            return (nil, source.name)
+        }
+    }
+
+    static func patreonData(_ uri: URI, req: Request, headers: HTTPHeaders = .init()) async throws -> Data {
         let patreon = try await req.client.get(uri, headers: headers)
         guard patreon.status == .ok, let body = patreon.body else {
             throw Abort(.badGateway, reason: "Patreon API returned HTTP \(patreon.status.code)")

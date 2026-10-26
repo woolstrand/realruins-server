@@ -123,6 +123,14 @@ final class AppTests: XCTestCase {
         XCTAssertFalse(ProgressDashboardService.membersURI(campaignID: "1", cursor: nil).string.contains("pledge_sum"))
     }
 
+    func testPublicCampaignPledgeSumIsDecoded() throws {
+        let campaign = try JSONDecoder().decode(PatreonPublicCampaign.self, from: Data("""
+        {"data":{"id":"2186817","type":"campaign","attributes":{"pledge_sum":3201}}}
+        """.utf8))
+        XCTAssertEqual(campaign.data.attributes.pledge_sum, 3201)
+        XCTAssertTrue(ProgressDashboardService.publicCampaignURI.string.contains("/api/campaigns/2186817"))
+    }
+
     func testSuccessfulGenerationIsThrottledButFailureIsRetryable() async {
         let gate = ProgressGenerationGate()
         let start = Date(timeIntervalSince1970: 1000)
