@@ -4,10 +4,10 @@
     { "amount": 100, "title": "Some room for bugfixes, minor improvements and feature requests" }
   ],
   "statuses": [
-    { "amount": 0, "description": "Unfortunately, at that level I'll not be able to run the server for a long time..." },
+    { "amount": 0, "description": "Unfortunately, at that level I'll not be able to run the server for too long..." },
     { "amount": 20, "description": "Every bit helps, but we're not quite out of the woods yet." },
-    { "amount": 50, "description": "Server secured. It's time for some bugfixing" }
-    { "amount": 75, "description": "Well, well, well, where is my to-do list?" }
+    { "amount": 50, "description": "Server secured. It's time for some bugfixing" },
+    { "amount": 75, "description": "Well, well, well, where is my to-do list?" },
     { "amount": 100, "description": "Amazing job! I think, I owe you a few updates!" }
   ]
 }
