@@ -201,7 +201,8 @@ struct PatreonMembers: Decodable {
     struct Member: Decodable {
         struct Attributes: Decodable {
             let patron_status: String?
-            let currently_entitled_amount_cents: Int?
+            let will_pay_amount_cents: Int?
+            let last_charge_status: String?
         }
         let attributes: Attributes?
     }
@@ -217,36 +218,19 @@ struct PatreonMembers: Decodable {
 
     var nextCursor: String? { meta?.pagination?.cursors?.next }
 
-    /// Monthly cents pledged by currently active patrons on this page.
+    /// Monthly cents expected from active patrons on this page, excluding those whose last charge failed.
     var activeCents: Int {
         data.reduce(0) { sum, member in
             guard member.attributes?.patron_status == "active_patron" else { return sum }
-            return sum + max(member.attributes?.currently_entitled_amount_cents ?? 0, 0)
+            if let status = member.attributes?.last_charge_status, status != "Paid", status != "Pending" {
+                return sum
+            }
+            return sum + max(member.attributes?.will_pay_amount_cents ?? 0, 0)
         }
     }
 }
 
-struct PatreonPublicCampaign: Decodable {
-    struct Campaign: Decodable {
-        struct Attributes: Decodable {
-            let pledge_sum: Int?
-        }
-
-        let attributes: Attributes
-    }
-
-    let data: Campaign
-}
-
-private protocol PatreonFundingSource {
-    var name: String { get }
-
-    func fundingCents(for req: Request) async throws -> Int
-}
-
-private struct PatreonMemberFundingSource: PatreonFundingSource {
-    let name = "Patreon member API"
-
+private struct PatreonMemberFundingSource {
     func fundingCents(for req: Request) async throws -> Int {
         guard let token = Environment.get("PATREON_ACCESS_TOKEN"), !token.isEmpty else {
             throw Abort(.internalServerError, reason: "PATREON_ACCESS_TOKEN is not configured")
@@ -286,24 +270,6 @@ private struct PatreonMemberFundingSource: PatreonFundingSource {
             pledgeSum += page.activeCents
             cursor = page.nextCursor
         } while cursor != nil
-        return pledgeSum
-    }
-}
-
-private struct PatreonPublicCampaignFundingSource: PatreonFundingSource {
-    let name = "Patreon public campaign API"
-
-    func fundingCents(for req: Request) async throws -> Int {
-        let campaign = try JSONDecoder().decode(
-            PatreonPublicCampaign.self,
-            from: try await ProgressDashboardService.patreonData(
-                ProgressDashboardService.publicCampaignURI,
-                req: req
-            )
-        )
-        guard let pledgeSum = campaign.data.attributes.pledge_sum, pledgeSum >= 0 else {
-            throw Abort(.badGateway, reason: "Patreon public campaign API returned an invalid pledge sum")
-        }
         return pledgeSum
     }
 }
@@ -370,11 +336,10 @@ final class ProgressDashboardService {
     }
 
     static let campaignsURI = URI(string: "https://www.patreon.com/api/oauth2/v2/campaigns")
-    static let publicCampaignURI = URI(string: "https://www.patreon.com/api/campaigns/2186817?fields%5Bcampaign%5D=creation_count%2Cmember_count_preference%2Coffers_paid_membership%2Cpaid_member_count%2Cpatron_count%2Cpay_per_name%2Cpledge_sum%2Cshow_earnings%2Cshow_patron_count&json-api-version=1.0&json-api-use-default-includes=false&include=%5B%5D")
 
     static func membersURI(campaignID: String, cursor: String?) -> URI {
         var string = "https://www.patreon.com/api/oauth2/v2/campaigns/\(campaignID)/members"
-            + "?fields%5Bmember%5D=patron_status,currently_entitled_amount_cents&page%5Bcount%5D=1000"
+            + "?fields%5Bmember%5D=patron_status,will_pay_amount_cents,last_charge_status&page%5Bcount%5D=1000"
         if let cursor, let encoded = cursor.addingPercentEncoding(withAllowedCharacters: .alphanumerics) {
             string += "&page%5Bcursor%5D=\(encoded)"
         }
@@ -382,30 +347,9 @@ final class ProgressDashboardService {
     }
 
     static func fundingCents(for req: Request) async throws -> Int {
-        let memberSource = PatreonMemberFundingSource()
-        let publicSource = PatreonPublicCampaignFundingSource()
-        async let memberResult = fundingResult(from: memberSource, for: req)
-        async let publicResult = fundingResult(from: publicSource, for: req)
-        let results = await [memberResult, publicResult]
-        let amounts = results.compactMap(\.amount)
-        guard let lowestAmount = amounts.min() else {
-            throw Abort(.badGateway, reason: "Both Patreon funding sources failed")
-        }
-        return lowestAmount
-    }
-
-    private static func fundingResult(
-        from source: PatreonFundingSource,
-        for req: Request
-    ) async -> (amount: Int?, source: String) {
-        do {
-            let amount = try await source.fundingCents(for: req)
-            req.logger.info("\(source.name) funding obtained: \(amount) cents")
-            return (amount, source.name)
-        } catch {
-            req.logger.error("\(source.name) funding unavailable: \(error)")
-            return (nil, source.name)
-        }
+        let amount = try await PatreonMemberFundingSource().fundingCents(for: req)
+        req.logger.info("Patreon funding obtained: \(amount) cents")
+        return amount
     }
 
     static func patreonData(_ uri: URI, req: Request, headers: HTTPHeaders = .init()) async throws -> Data {

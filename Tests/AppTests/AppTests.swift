@@ -113,22 +113,15 @@ final class AppTests: XCTestCase {
 
     func testMembersSumActivePatrons() throws {
         let members = try JSONDecoder().decode(PatreonMembers.self, from: Data("""
-        {"data":[{"attributes":{"patron_status":"active_patron","currently_entitled_amount_cents":3500}},
-        {"attributes":{"patron_status":"former_patron","currently_entitled_amount_cents":0}},
-        {"attributes":{"patron_status":"active_patron","currently_entitled_amount_cents":500}}],
+        {"data":[{"attributes":{"patron_status":"active_patron","will_pay_amount_cents":3500,"last_charge_status":"Paid"}},
+        {"attributes":{"patron_status":"former_patron","will_pay_amount_cents":0}},
+        {"attributes":{"patron_status":"active_patron","will_pay_amount_cents":900,"last_charge_status":"Declined"}},
+        {"attributes":{"patron_status":"active_patron","will_pay_amount_cents":500,"last_charge_status":null}}],
         "meta":{"pagination":{"cursors":{"next":"abc"}}}}
         """.utf8))
         XCTAssertEqual(members.activeCents, 4000)
         XCTAssertEqual(members.nextCursor, "abc")
-        XCTAssertFalse(ProgressDashboardService.membersURI(campaignID: "1", cursor: nil).string.contains("pledge_sum"))
-    }
-
-    func testPublicCampaignPledgeSumIsDecoded() throws {
-        let campaign = try JSONDecoder().decode(PatreonPublicCampaign.self, from: Data("""
-        {"data":{"id":"2186817","type":"campaign","attributes":{"pledge_sum":3201}}}
-        """.utf8))
-        XCTAssertEqual(campaign.data.attributes.pledge_sum, 3201)
-        XCTAssertTrue(ProgressDashboardService.publicCampaignURI.string.contains("/api/campaigns/2186817"))
+        XCTAssertTrue(ProgressDashboardService.membersURI(campaignID: "1", cursor: nil).string.contains("will_pay_amount_cents"))
     }
 
     func testSuccessfulGenerationIsThrottledButFailureIsRetryable() async {
