@@ -67,7 +67,7 @@ rr-server/
 3. The raw blueprint bytes are uploaded to DigitalOcean Spaces (bucket `realruinsv2`). The file is stored as `<uuid>.bp`.
 4. Other clients call `GET /maps/random` or `GET /maps/seed/:seed` to retrieve metadata. They then fetch the blueprint file directly from the Spaces CDN URL.
 5. The optional web UI (`/view/*`) renders Leaf templates for human browsing of stored maps.
-6. Separately, `/generateProgressDashboard` fetches Patreon campaign `pledge_sum` and writes
+6. Separately, `/generateProgressDashboard` fetches Patreon campaign members' entitled amounts and writes
    `Public/progressDashboard.png`, served anonymously as a static image.
 
 ## CI / Build

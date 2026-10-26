@@ -192,13 +192,38 @@ private func wrapped(_ value: String, limit: Int) -> [String] {
 
 struct PatreonCampaigns: Decodable {
     struct Campaign: Decodable {
-        struct Attributes: Decodable {
-            let pledge_sum: Int?
-        }
         let id: String
-        let attributes: Attributes?
     }
     let data: [Campaign]
+}
+
+struct PatreonMembers: Decodable {
+    struct Member: Decodable {
+        struct Attributes: Decodable {
+            let patron_status: String?
+            let currently_entitled_amount_cents: Int?
+        }
+        let attributes: Attributes?
+    }
+    struct Meta: Decodable {
+        struct Pagination: Decodable {
+            struct Cursors: Decodable { let next: String? }
+            let cursors: Cursors?
+        }
+        let pagination: Pagination?
+    }
+    let data: [Member]
+    let meta: Meta?
+
+    var nextCursor: String? { meta?.pagination?.cursors?.next }
+
+    /// Monthly cents pledged by currently active patrons on this page.
+    var activeCents: Int {
+        data.reduce(0) { sum, member in
+            guard member.attributes?.patron_status == "active_patron" else { return sum }
+            return sum + max(member.attributes?.currently_entitled_amount_cents ?? 0, 0)
+        }
+    }
 }
 
 /// Share of Patreon's monthly income assumed to reach the creator after fees and losses.
@@ -268,9 +293,16 @@ final class ProgressDashboardService {
             guard !id.isEmpty, id.allSatisfy(\.isNumber) else {
                 throw Abort(.badGateway, reason: "Patreon returned an invalid campaign ID")
             }
-            guard let pledgeSum = selected[0].attributes?.pledge_sum, pledgeSum >= 0 else {
-                throw Abort(.badGateway, reason: "Patreon returned no pledge_sum for the campaign")
-            }
+            var pledgeSum = 0
+            var cursor: String?
+            repeat {
+                let page = try JSONDecoder().decode(
+                    PatreonMembers.self,
+                    from: try await Self.patreonData(Self.membersURI(campaignID: id, cursor: cursor), req: req, headers: headers)
+                )
+                pledgeSum += page.activeCents
+                cursor = page.nextCursor
+            } while cursor != nil
             let dashboard = try ProgressDashboard(amount: Double(pledgeSum) / 100 * patreonPayoutFactor, config: config)
             let svg = dashboard.svg()
             try await Task.detached {
@@ -285,7 +317,16 @@ final class ProgressDashboardService {
         }
     }
 
-    static let campaignsURI = URI(string: "https://www.patreon.com/api/oauth2/v2/campaigns?fields%5Bcampaign%5D=pledge_sum")
+    static let campaignsURI = URI(string: "https://www.patreon.com/api/oauth2/v2/campaigns")
+
+    static func membersURI(campaignID: String, cursor: String?) -> URI {
+        var string = "https://www.patreon.com/api/oauth2/v2/campaigns/\(campaignID)/members"
+            + "?fields%5Bmember%5D=patron_status,currently_entitled_amount_cents&page%5Bcount%5D=1000"
+        if let cursor, let encoded = cursor.addingPercentEncoding(withAllowedCharacters: .alphanumerics) {
+            string += "&page%5Bcursor%5D=\(encoded)"
+        }
+        return URI(string: string)
+    }
 
     private static func patreonData(_ uri: URI, req: Request, headers: HTTPHeaders) async throws -> Data {
         let patreon = try await req.client.get(uri, headers: headers)

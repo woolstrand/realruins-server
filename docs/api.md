@@ -171,9 +171,8 @@ The solid fill interpolates from red at 10% of the first goal to yellow at 70%
 and green at 100%; below 10% it stays red, and from the first goal onward it
 stays green.
 The image shows the status and an approximation/refresh disclaimer, not a target list.
-The total is Patreon's own campaign `pledge_sum` (projected monthly income, which
-excludes cancelled pledges and duplicates), multiplied by 0.85 to approximate fees
-and losses. The creator access token needs `campaigns` access; when the
+The total is Patreon's own active members' summed `currently_entitled_amount_cents` (monthly income), multiplied by 0.85 to approximate fees
+and losses. The creator access token needs `campaigns` and `campaigns.members` access; when the
 account owns one campaign, `PATREON_CAMPAIGN_ID` is not required.
 
 ---
