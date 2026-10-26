@@ -86,8 +86,7 @@ struct ProgressDashboard {
         }
         let statusLines = captionLines(status?.description ?? "No current status", limit: 90, maxLines: 2)
         var body = """
-        <rect width="1200" height="390" fill="#101c2a"/>
-        <rect x="24" y="20" width="1152" height="350" rx="20" fill="#1b2d40"/>
+        <rect x="24" y="20" width="1152" height="376" rx="20" fill="#1b2d40"/>
         <text x="90" y="91" fill="#ffffff" font-size="48" font-weight="300">\(dollars(amount)) <tspan fill="#a9c4d9" font-size="26">/ month</tspan></text>
         <rect x="\(barX)" y="137" width="\(barWidth)" height="28" rx="14" fill="#40546a"/>
         <rect x="\(barX)" y="137" width="\(Int(Double(barWidth) * fraction))" height="28" rx="14" fill="\(barColor)"/>
@@ -108,7 +107,7 @@ struct ProgressDashboard {
         <text x="90" y="363" fill="#a9c4d9" font-size="14">Amounts are approximate, after subtracting processing fees and taxes. Refreshes daily.</text>
         """
         return """
-        <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="390" viewBox="0 0 1200 390" font-family="DejaVu Sans, sans-serif" font-weight="300">
+        <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="416" viewBox="0 0 1200 416" font-family="DejaVu Sans, sans-serif" font-weight="300">
         \(body)
         </svg>
         """
@@ -191,49 +190,19 @@ private func wrapped(_ value: String, limit: Int) -> [String] {
     return lines
 }
 
-private struct PatreonCampaigns: Decodable {
+struct PatreonCampaigns: Decodable {
     struct Campaign: Decodable {
+        struct Attributes: Decodable {
+            let pledge_sum: Int?
+        }
         let id: String
+        let attributes: Attributes?
     }
     let data: [Campaign]
 }
 
-struct PatreonMembers: Decodable {
-    struct Member: Decodable {
-        struct Attributes: Decodable {
-            let patron_status: String?
-            let currently_entitled_amount_cents: Int
-            let pledge_cadence: Int?
-        }
-        let attributes: Attributes
-    }
-    struct Meta: Decodable {
-        struct Pagination: Decodable {
-            struct Cursors: Decodable {
-                let next: String?
-            }
-            let cursors: Cursors?
-        }
-        let pagination: Pagination
-    }
-    let data: [Member]
-    let meta: Meta
-
-    func monthlyCents() throws -> Double {
-        var total = 0.0
-        for member in data where member.attributes.patron_status == "active_patron" {
-            let attributes = member.attributes
-            guard attributes.currently_entitled_amount_cents >= 0,
-                  let cadence = attributes.pledge_cadence, cadence > 0 else {
-                throw ProgressError.invalidPledge
-            }
-            total += Double(attributes.currently_entitled_amount_cents) / Double(cadence)
-        }
-        return total
-    }
-
-    var nextCursor: String? { meta.pagination.cursors?.next }
-}
+/// Share of Patreon's monthly income assumed to reach the creator after fees and losses.
+let patreonPayoutFactor = 0.85
 
 actor ProgressGenerationGate {
     private var lastGenerated: Date?
@@ -286,7 +255,7 @@ final class ProgressDashboardService {
             let campaigns = try JSONDecoder().decode(
                 PatreonCampaigns.self,
                 from: try await Self.patreonData(
-                    URI(string: "https://www.patreon.com/api/oauth2/v2/campaigns"),
+                    Self.campaignsURI,
                     req: req, headers: headers
                 )
             )
@@ -299,25 +268,10 @@ final class ProgressDashboardService {
             guard !id.isEmpty, id.allSatisfy(\.isNumber) else {
                 throw Abort(.badGateway, reason: "Patreon returned an invalid campaign ID")
             }
-            var cursor: String?
-            var seenCursors = Set<String>()
-            var monthlyCents = 0.0
-            repeat {
-                let page = try JSONDecoder().decode(
-                    PatreonMembers.self,
-                    from: try await Self.patreonData(
-                        Self.membersURI(campaignID: id, cursor: cursor), req: req, headers: headers
-                    )
-                )
-                monthlyCents += try page.monthlyCents()
-                cursor = page.nextCursor
-                if let cursor = cursor {
-                    guard !cursor.isEmpty, seenCursors.insert(cursor).inserted else {
-                        throw Abort(.badGateway, reason: "Patreon returned an invalid pagination cursor")
-                    }
-                }
-            } while cursor != nil
-            let dashboard = try ProgressDashboard(amount: monthlyCents / 100, config: config)
+            guard let pledgeSum = selected[0].attributes?.pledge_sum, pledgeSum >= 0 else {
+                throw Abort(.badGateway, reason: "Patreon returned no pledge_sum for the campaign")
+            }
+            let dashboard = try ProgressDashboard(amount: Double(pledgeSum) / 100 * patreonPayoutFactor, config: config)
             let svg = dashboard.svg()
             try await Task.detached {
                 try Self.render(svg, to: self.publicDirectory)
@@ -331,16 +285,7 @@ final class ProgressDashboardService {
         }
     }
 
-    static func membersURI(campaignID: String, cursor: String?) -> URI {
-        var url = URLComponents(string: "https://www.patreon.com/api/oauth2/v2/campaigns/\(campaignID)/members")!
-        url.queryItems = [
-            URLQueryItem(name: "fields[member]", value: "patron_status,currently_entitled_amount_cents,pledge_cadence")
-        ]
-        if let cursor = cursor {
-            url.queryItems?.append(URLQueryItem(name: "page[cursor]", value: cursor))
-        }
-        return URI(string: url.url!.absoluteString)
-    }
+    static let campaignsURI = URI(string: "https://www.patreon.com/api/oauth2/v2/campaigns?fields%5Bcampaign%5D=pledge_sum")
 
     private static func patreonData(_ uri: URI, req: Request, headers: HTTPHeaders) async throws -> Data {
         let patreon = try await req.client.get(uri, headers: headers)
