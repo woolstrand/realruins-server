@@ -37,8 +37,8 @@ The sample values are placeholders. The app reads the file on each generation. E
 `Public/` is writable by the server process and persisted across container restarts if the
 cached PNG must survive restarts; otherwise it returns 404 until generation succeeds.
 Patreon tokens can expire and must be refreshed or replaced by the deployment operator.
-The generator reads the campaign's `pledge_sum` (monthly, in cents) from the Patreon v2
-campaigns endpoint and multiplies it by 0.85 to approximate fees and losses.
+The generator sums `currently_entitled_amount_cents` of active patrons (paginated) from the Patreon v2
+campaign members endpoint and multiplies it by 0.85 to approximate fees and losses.
 
 For Docker deployments, pass secrets at **runtime** — not at build time — so they are never
 baked into the image:

@@ -111,12 +111,16 @@ final class AppTests: XCTestCase {
         XCTAssertThrowsError(try ProgressDashboard(amount: 20, config: config))
     }
 
-    func testCampaignsDecodePledgeSum() throws {
-        let campaigns = try JSONDecoder().decode(PatreonCampaigns.self, from: Data("""
-        {"data":[{"id":"1","attributes":{"pledge_sum":3500}}]}
+    func testMembersSumActivePatrons() throws {
+        let members = try JSONDecoder().decode(PatreonMembers.self, from: Data("""
+        {"data":[{"attributes":{"patron_status":"active_patron","currently_entitled_amount_cents":3500}},
+        {"attributes":{"patron_status":"former_patron","currently_entitled_amount_cents":0}},
+        {"attributes":{"patron_status":"active_patron","currently_entitled_amount_cents":500}}],
+        "meta":{"pagination":{"cursors":{"next":"abc"}}}}
         """.utf8))
-        XCTAssertEqual(campaigns.data[0].attributes?.pledge_sum, 3500)
-        XCTAssertTrue(ProgressDashboardService.campaignsURI.string.contains("pledge_sum"))
+        XCTAssertEqual(members.activeCents, 4000)
+        XCTAssertEqual(members.nextCursor, "abc")
+        XCTAssertFalse(ProgressDashboardService.membersURI(campaignID: "1", cursor: nil).string.contains("pledge_sum"))
     }
 
     func testSuccessfulGenerationIsThrottledButFailureIsRetryable() async {
