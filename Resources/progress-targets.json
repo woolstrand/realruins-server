@@ -1,7 +1,7 @@
 {
   "targets": [
     { "amount": 50, "title": "To fully cover server expenses", "title_achieved": "Server costs are fully covered" },
-    { "amount": 100, "title": "To make some for bugfixes, minor improvements and feature requests", "title_achieved": "There is a room for mod improvemetns! I wonder what can go next." }
+    { "amount": 100, "title": "To make some for bugfixes, minor improvements and feature requests", "title_achieved": "There is a room for mod improvements! I wonder what can go next." }
   ],
   "statuses": [
     { "amount": 0, "description": "Unfortunately, at that level I'll not be able to run the server for too long..." },
