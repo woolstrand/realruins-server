@@ -2,10 +2,46 @@
 import XCTVapor
 
 final class AppTests: XCTestCase {
+    static let fixtureJSON = """
+    {
+      "targets": [
+        {"amount": 50, "title": "Goal title", "title_achieved": "Achieved title"},
+        {"amount": 100, "title": "Next goal title", "title_achieved": "Next achieved title"}
+      ],
+      "statuses": [{"amount": 0, "description": "Starting status"}, {"amount": 50, "description": "Halfway status"}]
+    }
+    """
+
+    private func loadConfig(_ json: String) throws -> ProgressConfig {
+        try JSONDecoder().decode(ProgressConfig.self, from: Data(json.utf8))
+    }
+
+    func testGoalCaptionUsesTitleUntilAchievedThenTitleAchieved() throws {
+        let config = try loadConfig(Self.fixtureJSON)
+        let before = try ProgressDashboard(amount: 49, config: config).svg()
+        XCTAssertTrue(before.contains(">Goal title</text>"))
+        XCTAssertFalse(before.contains("Achieved title"))
+
+        let atGoal = try ProgressDashboard(amount: 50, config: config).svg()
+        XCTAssertTrue(atGoal.contains(">Achieved title</text>"))
+        XCTAssertTrue(atGoal.contains(">Next goal title</text>"))
+        XCTAssertFalse(atGoal.contains(">Goal title</text>"))
+
+        let complete = try ProgressDashboard(amount: 100, config: config).svg()
+        XCTAssertTrue(complete.contains(">Next achieved title</text>"))
+        XCTAssertFalse(complete.contains("Next goal title"))
+    }
+
+    func testTargetRequiresNonEmptyTitleAchieved() throws {
+        XCTAssertThrowsError(try loadConfig(#"{"targets":[{"amount":50,"title":"T"}],"statuses":[]}"#))
+        let empty = try loadConfig(#"{"targets":[{"amount":50,"title":"T","title_achieved":""}],"statuses":[]}"#)
+        XCTAssertThrowsError(try ProgressDashboard(amount: 20, config: empty))
+    }
+
     func testProgressSelectionAndImage() throws {
         let config = try JSONDecoder().decode(ProgressConfig.self, from: Data("""
         {
-          "targets": [{"amount": 100, "title": "Next & <goal>"}, {"amount": 50, "title": "First"}],
+          "targets": [{"amount": 100, "title": "Next & <goal>", "title_achieved": "Next achieved"}, {"amount": 50, "title": "First", "title_achieved": "First achieved"}],
           "statuses": [{"amount": 50, "description": "Reached"}, {"amount": 0, "description": "Starting"}]
         }
         """.utf8))
@@ -48,10 +84,7 @@ final class AppTests: XCTestCase {
     }
 
     func testGaugeUsesSameAxisForFillAndGoalMarkers() throws {
-        let config = try JSONDecoder().decode(
-            ProgressConfig.self,
-            from: Data(contentsOf: URL(fileURLWithPath: "Resources/progress-targets.json"))
-        )
+        let config = try loadConfig(Self.fixtureJSON)
         for (amount, fillWidth, markers) in [
             (10, 185, [1017]), (40, 741, [1017]), (49, 908, [1017]),
             (50, 85, [175, 1025]), (51, 102, [175, 1025]),
@@ -65,17 +98,15 @@ final class AppTests: XCTestCase {
             }
         }
         let first = try ProgressDashboard(amount: 10, config: config).svg()
-        XCTAssertTrue(first.contains("Server expenses are fully covered</text>"))
-        XCTAssertTrue(first.contains("for too long..."))
+        XCTAssertTrue(first.contains(">Goal title</text>"))
+        XCTAssertTrue(first.contains("Starting status"))
         let exceeded = try ProgressDashboard(amount: 600, config: config).svg()
-        XCTAssertTrue(exceeded.contains("Some room for bugfixes, minor improvements and feature requests</text>"))
+        XCTAssertTrue(exceeded.contains(">Next achieved title</text>"))
+        XCTAssertFalse(exceeded.contains("Next goal title"))
     }
 
     func testBarUsesSolidColorInterpolatedUntilFirstGoal() throws {
-        let config = try JSONDecoder().decode(
-            ProgressConfig.self,
-            from: Data(contentsOf: URL(fileURLWithPath: "Resources/progress-targets.json"))
-        )
+        let config = try loadConfig(Self.fixtureJSON)
         for (amount, color) in [
             (0, "#E95C5C"), (3, "#E95C5C"), (5, "#E95C5C"),
             (10, "#EA7163"), (35, "#F1D887"), (45, "#89D798"),
@@ -92,12 +123,15 @@ final class AppTests: XCTestCase {
     func testLongGoalCaptionsWrapNextToMarkers() throws {
         let config = try JSONDecoder().decode(ProgressConfig.self, from: Data("""
         {"targets":[
-          {"amount":50,"title":"Server expenses are fully covered"},
-          {"amount":100,"title":"Some room for bugfixes, minor improvements and feature requests"}
+          {"amount":50,"title":"Server expenses are fully covered","title_achieved":"Server costs are fully covered"},
+          {"amount":100,"title":"Some room for bugfixes, minor improvements and feature requests","title_achieved":"Room for improvements"}
         ],"statuses":[]}
         """.utf8))
         let image = try ProgressDashboard(amount: 75, config: config).svg()
         XCTAssertTrue(image.contains("x=\"175\" y=\"234\" text-anchor=\"start\""))
+        XCTAssertTrue(image.contains("Server costs are fully</text>"))
+        XCTAssertTrue(image.contains(">covered</text>"))
+        XCTAssertFalse(image.contains("Server expenses are fully covered"))
         XCTAssertTrue(image.contains("x=\"1025\" y=\"234\" text-anchor=\"end\""))
         XCTAssertTrue(image.contains("x=\"1025\" y=\"255\" text-anchor=\"end\""))
         XCTAssertTrue(image.contains("minor improvements and"))
@@ -106,7 +140,7 @@ final class AppTests: XCTestCase {
 
     func testInvalidTargetsAreRejected() throws {
         let config = try JSONDecoder().decode(ProgressConfig.self, from: Data("""
-        {"targets":[{"amount":0,"title":"Invalid"}],"statuses":[]}
+        {"targets":[{"amount":0,"title":"Invalid","title_achieved":"Invalid"}],"statuses":[]}
         """.utf8))
         XCTAssertThrowsError(try ProgressDashboard(amount: 20, config: config))
     }
@@ -148,27 +182,11 @@ final class AppTests: XCTestCase {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
-        let config = try JSONDecoder().decode(ProgressConfig.self, from: Data("""
-        {"targets":[{"amount":50,"title":"First"}],"statuses":[]}
-        """.utf8))
+        let config = try loadConfig(#"{"targets":[{"amount":50,"title":"First","title_achieved":"First achieved"}],"statuses":[]}"#)
         let image = try ProgressDashboard(amount: 25, config: config).svg()
         try ProgressDashboardService.render(image, to: directory.path)
         try ProgressDashboardService.render(image, to: directory.path)
         let bytes = try Data(contentsOf: directory.appendingPathComponent("progressDashboard.png"))
         XCTAssertEqual(Array(bytes.prefix(8)), [137, 80, 78, 71, 13, 10, 26, 10])
-        if let sampleDirectory = ProcessInfo.processInfo.environment["PROGRESS_SAMPLE_DIRECTORY"] {
-            let sampleConfig = try JSONDecoder().decode(
-                ProgressConfig.self,
-                from: Data(contentsOf: URL(fileURLWithPath: "Resources/progress-targets.json"))
-            )
-            for amount in [3, 10, 35, 45, 60] {
-                let sample = try ProgressDashboard(amount: Double(amount), config: sampleConfig).svg()
-                try ProgressDashboardService.render(sample, to: directory.path)
-                try Data(contentsOf: directory.appendingPathComponent("progressDashboard.png")).write(
-                    to: URL(fileURLWithPath: sampleDirectory).appendingPathComponent("progressDashboard-\(amount).png"),
-                    options: .atomic
-                )
-            }
-        }
     }
 }

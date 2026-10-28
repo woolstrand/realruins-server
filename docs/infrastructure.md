@@ -31,8 +31,9 @@ with placeholder fallbacks when variables are not set:
 | `PATREON_CAMPAIGN_ID` | Select a campaign if the creator account has more than one | Unset; automatically uses the sole campaign |
 
 Edit `Resources/progress-targets.json` to configure the dashboard. It has `targets` entries
-(`amount` in US dollars and `title`) and `statuses` entries (`amount` in US dollars and
-`description`). Target amounts must be positive and unique; status thresholds may be zero.
+(`amount` in US dollars, `title` shown while not yet achieved, and `title_achieved` shown once the
+amount is reached) and `statuses` entries (`amount` in US dollars and `description`). Target amounts
+must be positive and unique; status thresholds may be zero.
 The sample values are placeholders. The app reads the file on each generation. Ensure
 `Public/` is writable by the server process and persisted across container restarts if the
 cached PNG must survive restarts; otherwise it returns 404 until generation succeeds.

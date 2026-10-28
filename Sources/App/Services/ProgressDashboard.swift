@@ -10,6 +10,13 @@ struct ProgressConfig: Decodable {
     struct Target: Decodable {
         let amount: Double
         let title: String
+        let titleAchieved: String
+
+        enum CodingKeys: String, CodingKey {
+            case amount
+            case title
+            case titleAchieved = "title_achieved"
+        }
     }
 
     struct Status: Decodable {
@@ -22,7 +29,7 @@ struct ProgressConfig: Decodable {
 
     func validate() throws {
         guard !targets.isEmpty,
-              targets.allSatisfy({ $0.amount > 0 && $0.amount.isFinite && !$0.title.isEmpty }),
+              targets.allSatisfy({ $0.amount > 0 && $0.amount.isFinite && !$0.title.isEmpty && !$0.titleAchieved.isEmpty }),
               statuses.allSatisfy({ $0.amount >= 0 && $0.amount.isFinite && !$0.description.isEmpty }),
               Set(targets.map(\.amount)).count == targets.count else {
             throw ProgressError.invalidConfiguration
@@ -118,7 +125,8 @@ struct ProgressDashboard {
         <line x1="\(x)" y1="124" x2="\(x)" y2="180" stroke="#ffffff" stroke-width="3"/>
         <text x="\(x)" y="210" text-anchor="\(anchor)" fill="#ffffff" font-size="21">\(dollars(target.amount))</text>
         """
-        for (index, line) in captionLines(target.title, limit: wide ? 64 : 27, maxLines: 3).enumerated() {
+        let text = target.amount <= amount ? target.titleAchieved : target.title
+        for (index, line) in captionLines(text, limit: wide ? 64 : 27, maxLines: 3).enumerated() {
             result += """
             <text x="\(x)" y="\(234 + index * 21)" text-anchor="\(anchor)" fill="#c6d4df" font-size="17">\(escape(line))</text>
             """
@@ -302,11 +310,11 @@ actor ProgressGenerationGate {
 final class ProgressDashboardService {
     private let gate: ProgressGenerationGate
     private let publicDirectory: String
-    private let resourcesDirectory: String
+    private let loadConfig: () throws -> ProgressConfig
 
-    init(publicDirectory: String, resourcesDirectory: String) {
+    init(publicDirectory: String, loadConfig: @escaping () throws -> ProgressConfig) {
         self.publicDirectory = publicDirectory
-        self.resourcesDirectory = resourcesDirectory
+        self.loadConfig = loadConfig
         let image = URL(fileURLWithPath: publicDirectory).appendingPathComponent("progressDashboard.png")
         let modified = try? image.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
         gate = ProgressGenerationGate(lastGenerated: modified)
@@ -315,10 +323,7 @@ final class ProgressDashboardService {
     func generate(_ req: Request) async -> Response {
         guard await gate.begin() else { return response("throttled") }
         do {
-            let config = try JSONDecoder().decode(
-                ProgressConfig.self,
-                from: Data(contentsOf: URL(fileURLWithPath: resourcesDirectory).appendingPathComponent("progress-targets.json"))
-            )
+            let config = try loadConfig()
             try config.validate()
             let fundingCents = try await Self.fundingCents(for: req)
             let dashboard = try ProgressDashboard(amount: Double(fundingCents) / 100 * patreonPayoutFactor, config: config)
