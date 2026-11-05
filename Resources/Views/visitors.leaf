@@ -3,6 +3,7 @@
 <head>
 <title>Visitors Analytics</title>
 <link href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet">
+<script src="/js/links.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
   .stat-value { font-size: 1.6em; font-weight: bold; }
@@ -232,7 +233,7 @@
               <td class="text-muted">N/A</td>
               <td>#(upload.version)</td>
               <td>#(upload.updatedAt)</td>
-              <td><a href="/view/map/#(upload.id)">View</a></td>
+              <td><a data-link="/view/map/#(upload.id)">View</a></td>
             </tr>
             #endfor
             #else:

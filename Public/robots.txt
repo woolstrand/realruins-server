@@ -1,0 +1,6 @@
+# Keep crawlers out of the map browser and the API. The landing page (/view)
+# itself may be indexed, but nothing below it.
+User-agent: *
+Disallow: /view/
+Disallow: /maps
+Disallow: /generateProgressDashboard

@@ -32,6 +32,7 @@ public func configure(_ app: Application) throws {
         allowedHeaders: [.accept, .authorization, .contentType, .origin, .xRequestedWith]
     )
     app.middleware.use(CORSMiddleware(configuration: corsConfig))
+    app.middleware.use(RobotsTagMiddleware())
     app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
     app.middleware.use(ErrorMiddleware.default(environment: app.environment))
 

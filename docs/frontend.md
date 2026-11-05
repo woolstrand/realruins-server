@@ -132,4 +132,16 @@ Uses **Bootstrap 3.3.7** (MaxCDN) + **Chart.js 4.4.0** (jsDelivr CDN).
 ## Frontend Notes
 
 - All pages load Bootstrap and jQuery from public CDNs — no local assets except the `Public/` directory (which currently appears empty / unused by templates).
-- The `FileMiddleware` serves static files from `Public/` but the Dockerfile has the `COPY Public` line commented out.
+- The `FileMiddleware` serves static files from `Public/` (`robots.txt`, `js/links.js`).
+
+---
+
+## Crawler protection
+
+Three layers keep automated crawlers from walking the map browser:
+
+- **`Public/robots.txt`** — disallows `/view/`, `/maps` and `/generateProgressDashboard` for well-behaved crawlers (the `/view` landing page stays allowed).
+- **`RobotsTagMiddleware`** (`Sources/App/Middleware/RobotsTagMiddleware.swift`) — adds `X-Robots-Tag: noindex, nofollow` to `/view/*` and `/maps*` responses, and `nofollow` to the `/view` landing page.
+- **Deferred links (`Public/js/links.js`)** — templates never emit `href` for internal navigation. Links are written as `<a data-link="/path">`; the script makes them focusable and attaches the real `href` only on hover, keyboard focus or touch, so scrapers that harvest `href`s from the HTML (or from a headless render right after load) find nothing to follow, while middle-click / open-in-new-tab still work for people. Any template with such links must include `<script src="/js/links.js" defer></script>` (`tablebase.leaf` already does).
+
+None of this stops a bot that deliberately enumerates `/view/map/<id>`; that needs per-IP rate limiting.
