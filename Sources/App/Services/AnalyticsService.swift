@@ -21,7 +21,7 @@ actor AnalyticsCleanupTracker {
 
 // MARK: - Shared result types
 
-struct VisitorsStats {
+struct VisitorsStats: Encodable {
     let uploaders: Int
     let randomReaders: Int
     let seedReaders: Int
@@ -111,6 +111,20 @@ struct AnalyticsService {
             ALTER TABLE analytics_daily_summary
             ADD COLUMN request_count INT NOT NULL DEFAULT 0
             """)
+
+        // Hour-granular events, kept for ~2 days only. Used for the rolling
+        // "last 24 hours" stats, which the per-day analytics_events table cannot answer.
+        try await sql.raw("""
+            CREATE TABLE IF NOT EXISTS analytics_hourly_events (
+                id            INT AUTO_INCREMENT PRIMARY KEY,
+                ip            VARCHAR(45)  NOT NULL,
+                event_type    VARCHAR(32)  NOT NULL,
+                event_hour    DATETIME     NOT NULL,
+                request_count INT          NOT NULL DEFAULT 1,
+                UNIQUE KEY    uk_ip_type_hour (ip, event_type, event_hour),
+                INDEX         idx_event_hour  (event_hour)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """).run()
     }
 
     /// Runs an `ALTER TABLE … ADD COLUMN` statement, silently ignoring MySQL error 1060
@@ -140,6 +154,11 @@ struct AnalyticsService {
                 VALUES (\(bind: ip), \(bind: eventType.rawValue), CURDATE(), NOW(), 1)
                 ON DUPLICATE KEY UPDATE request_count = request_count + 1
                 """).run()
+            try await sql.raw("""
+                INSERT INTO analytics_hourly_events (ip, event_type, event_hour, request_count)
+                VALUES (\(bind: ip), \(bind: eventType.rawValue), DATE_FORMAT(NOW(), '%Y-%m-%d %H:00:00'), 1)
+                ON DUPLICATE KEY UPDATE request_count = request_count + 1
+                """).run()
             if await AnalyticsCleanupTracker.shared.shouldCleanup() {
                 try await cleanup(on: db)
             }
@@ -151,7 +170,8 @@ struct AnalyticsService {
     // MARK: Cleanup (archive events older than 30 days)
 
     /// Aggregates events older than 30 days into `analytics_daily_summary` and
-    /// then deletes them from `analytics_events`.
+    /// then deletes them from `analytics_events`. Also drops hourly events older
+    /// than 2 days (they only back the rolling last-24-hours stats).
     static func cleanup(on db: Database) async throws {
         guard let sql = db as? SQLDatabase else { return }
 
@@ -173,6 +193,11 @@ struct AnalyticsService {
             DELETE FROM analytics_events
             WHERE event_date < DATE_SUB(CURDATE(), INTERVAL 30 DAY)
             """).run()
+
+        try await sql.raw("""
+            DELETE FROM analytics_hourly_events
+            WHERE event_hour < DATE_SUB(NOW(), INTERVAL 2 DAY)
+            """).run()
     }
 
     private struct EventTypeCount: Decodable {
@@ -186,77 +211,81 @@ struct AnalyticsService {
         let requestCount: Int
     }
 
-    /// Returns unique-user counts and request totals for today.
-    static func dailyStats(on db: Database) async throws -> VisitorsStats {
-        guard let sql = db as? SQLDatabase else { return .zero }
-
-        let byType = try await sql.raw("""
-            SELECT event_type AS eventType,
-                   COUNT(DISTINCT ip) AS uniqueCount,
-                   COALESCE(SUM(request_count), 0) AS requestCount
-            FROM analytics_events
-            WHERE event_date = CURDATE()
-            GROUP BY event_type
-            """).all(decoding: EventTypeCount.self)
-
-        let totalRows = try await sql.raw("""
-            SELECT COUNT(DISTINCT ip) AS uniqueCount,
-                   COALESCE(SUM(request_count), 0) AS requestCount
-            FROM analytics_events
-            WHERE event_date = CURDATE()
-              AND event_type IN ('upload', 'random_read', 'seed_read')
-            """).all(decoding: SingleCount.self)
-
-        return VisitorsStats(
-            uploaders:            byType.first(where: { $0.eventType == "upload" })?.uniqueCount ?? 0,
-            randomReaders:        byType.first(where: { $0.eventType == "random_read" })?.uniqueCount ?? 0,
-            seedReaders:          byType.first(where: { $0.eventType == "seed_read" })?.uniqueCount ?? 0,
-            apiTotal:             totalRows.first?.uniqueCount ?? 0,
-            dashboard:            byType.first(where: { $0.eventType == "dashboard" })?.uniqueCount ?? 0,
-            uploaderRequests:     byType.first(where: { $0.eventType == "upload" })?.requestCount ?? 0,
-            randomReaderRequests: byType.first(where: { $0.eventType == "random_read" })?.requestCount ?? 0,
-            seedReaderRequests:   byType.first(where: { $0.eventType == "seed_read" })?.requestCount ?? 0,
-            apiTotalRequests:     totalRows.first?.requestCount ?? 0,
-            dashboardRequests:    byType.first(where: { $0.eventType == "dashboard" })?.requestCount ?? 0
+    /// Returns unique-user counts and request totals for the rolling last 24 hours
+    /// (hour granularity: the current partial hour plus the 23 preceding full hours).
+    static func last24HoursStats(on db: Database) async throws -> VisitorsStats {
+        try await stats(
+            table: "analytics_hourly_events",
+            condition: "event_hour >= DATE_FORMAT(DATE_SUB(NOW(), INTERVAL 23 HOUR), '%Y-%m-%d %H:00:00')",
+            on: db
         )
     }
 
     /// Returns unique-user counts and request totals for the last 30 days.
     static func monthlyStats(on db: Database) async throws -> VisitorsStats {
+        try await stats(
+            table: "analytics_events",
+            condition: "event_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)",
+            on: db
+        )
+    }
+
+    /// Computes per-category and API-total stats for rows of `table` matching `condition`.
+    /// Both arguments are fixed, internal SQL fragments — never user input.
+    private static func stats(table: String, condition dateCondition: String, on db: Database) async throws -> VisitorsStats {
         guard let sql = db as? SQLDatabase else { return .zero }
 
         let byType = try await sql.raw("""
             SELECT event_type AS eventType,
                    COUNT(DISTINCT ip) AS uniqueCount,
                    COALESCE(SUM(request_count), 0) AS requestCount
-            FROM analytics_events
-            WHERE event_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+            FROM \(unsafeRaw: table)
+            WHERE \(unsafeRaw: dateCondition)
             GROUP BY event_type
             """).all(decoding: EventTypeCount.self)
 
         let totalRows = try await sql.raw("""
             SELECT COUNT(DISTINCT ip) AS uniqueCount,
                    COALESCE(SUM(request_count), 0) AS requestCount
-            FROM analytics_events
-            WHERE event_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+            FROM \(unsafeRaw: table)
+            WHERE \(unsafeRaw: dateCondition)
               AND event_type IN ('upload', 'random_read', 'seed_read')
             """).all(decoding: SingleCount.self)
 
+        func row(_ type: EventType) -> EventTypeCount? {
+            byType.first(where: { $0.eventType == type.rawValue })
+        }
+
         return VisitorsStats(
-            uploaders:            byType.first(where: { $0.eventType == "upload" })?.uniqueCount ?? 0,
-            randomReaders:        byType.first(where: { $0.eventType == "random_read" })?.uniqueCount ?? 0,
-            seedReaders:          byType.first(where: { $0.eventType == "seed_read" })?.uniqueCount ?? 0,
+            uploaders:            row(.upload)?.uniqueCount ?? 0,
+            randomReaders:        row(.randomRead)?.uniqueCount ?? 0,
+            seedReaders:          row(.seedRead)?.uniqueCount ?? 0,
             apiTotal:             totalRows.first?.uniqueCount ?? 0,
-            dashboard:            byType.first(where: { $0.eventType == "dashboard" })?.uniqueCount ?? 0,
-            uploaderRequests:     byType.first(where: { $0.eventType == "upload" })?.requestCount ?? 0,
-            randomReaderRequests: byType.first(where: { $0.eventType == "random_read" })?.requestCount ?? 0,
-            seedReaderRequests:   byType.first(where: { $0.eventType == "seed_read" })?.requestCount ?? 0,
+            dashboard:            row(.dashboard)?.uniqueCount ?? 0,
+            uploaderRequests:     row(.upload)?.requestCount ?? 0,
+            randomReaderRequests: row(.randomRead)?.requestCount ?? 0,
+            seedReaderRequests:   row(.seedRead)?.requestCount ?? 0,
             apiTotalRequests:     totalRows.first?.requestCount ?? 0,
-            dashboardRequests:    byType.first(where: { $0.eventType == "dashboard" })?.requestCount ?? 0
+            dashboardRequests:    row(.dashboard)?.requestCount ?? 0
         )
     }
 
-    // MARK: - Daily breakdown (for chart)
+    // MARK: - Daily breakdown (for charts)
+
+    /// Which group of event types a daily breakdown covers.
+    enum BreakdownGroup {
+        /// Game API calls: uploads, random reads and seed reads.
+        case api
+        /// Web dashboard page views.
+        case web
+
+        fileprivate var eventTypesSQL: String {
+            switch self {
+            case .api: return "'upload', 'random_read', 'seed_read'"
+            case .web: return "'dashboard'"
+            }
+        }
+    }
 
     private struct DailyBreakdownRaw: Decodable {
         let eventDate: String
@@ -264,8 +293,10 @@ struct AnalyticsService {
         let requestCount: Int
     }
 
-    /// Returns per-day unique-IP counts and total request counts for the last 30 days.
-    static func dailyBreakdown(on db: Database) async throws -> [DailyBreakdownRow] {
+    /// Returns per-day unique-IP counts and total request counts for the last 30 days,
+    /// restricted to the given event-type group. Days without any events are filled
+    /// with zeros so the chart's X axis is continuous.
+    static func dailyBreakdown(_ group: BreakdownGroup, on db: Database) async throws -> [DailyBreakdownRow] {
         guard let sql = db as? SQLDatabase else { return [] }
 
         let rows = try await sql.raw("""
@@ -274,11 +305,40 @@ struct AnalyticsService {
                    COALESCE(SUM(request_count), 0) AS requestCount
             FROM analytics_events
             WHERE event_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+              AND event_type IN (\(unsafeRaw: group.eventTypesSQL))
             GROUP BY event_date
             ORDER BY event_date ASC
             """).all(decoding: DailyBreakdownRaw.self)
 
-        return rows.map { DailyBreakdownRow(dateStr: $0.eventDate, uniqueCount: $0.uniqueCount, requestCount: $0.requestCount) }
+        let byDate = Dictionary(rows.map { ($0.eventDate, $0) }, uniquingKeysWith: { a, _ in a })
+
+        // Build the continuous date range from the first returned day (or 30 days ago)
+        // up to the last returned day (or today, UTC).
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+
+        let today = calendar.startOfDay(for: Date())
+        let defaultStart = calendar.date(byAdding: .day, value: -30, to: today) ?? today
+        let start = min(rows.first.flatMap { formatter.date(from: $0.eventDate) } ?? defaultStart, defaultStart)
+        let end = max(rows.last.flatMap { formatter.date(from: $0.eventDate) } ?? today, today)
+
+        var result: [DailyBreakdownRow] = []
+        var day = start
+        while day <= end {
+            let key = formatter.string(from: day)
+            let raw = byDate[key]
+            result.append(DailyBreakdownRow(dateStr: key,
+                                            uniqueCount: raw?.uniqueCount ?? 0,
+                                            requestCount: raw?.requestCount ?? 0))
+            guard let next = calendar.date(byAdding: .day, value: 1, to: day) else { break }
+            day = next
+        }
+        return result
     }
 
     // MARK: - Top IPs per event-type group (today)

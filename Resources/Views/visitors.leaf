@@ -15,33 +15,33 @@
 <p class="text-center text-muted">Data as of #(todayStr) UTC</p>
 
 <div class="row">
-  <!-- Daily API Users -->
+  <!-- Last 24 Hours API Users -->
   <div class="col-sm-6">
     <div class="panel panel-primary">
-      <div class="panel-heading"><h3>Today — API Users</h3></div>
+      <div class="panel-heading"><h3>Last 24 Hours — API Users</h3></div>
       <div class="panel-body">
         <table class="table table-condensed table-bordered">
           <thead><tr><th>Category</th><th class="text-right">Unique IPs</th><th class="text-right">Requests</th></tr></thead>
           <tbody>
-            <tr><td>Uploaders</td><td class="text-right stat-value">#(dailyUploaders)</td><td class="text-right">#(dailyUploaderRequests)</td></tr>
-            <tr><td>Random readers</td><td class="text-right stat-value">#(dailyRandomReaders)</td><td class="text-right">#(dailyRandomReaderRequests)</td></tr>
-            <tr><td>Planetary ruins readers</td><td class="text-right stat-value">#(dailySeedReaders)</td><td class="text-right">#(dailySeedReaderRequests)</td></tr>
-            <tr class="active"><td><strong>Total API</strong></td><td class="text-right stat-value"><strong>#(dailyApiTotal)</strong></td><td class="text-right"><strong>#(dailyApiTotalRequests)</strong></td></tr>
+            <tr><td>Uploaders</td><td class="text-right stat-value">#(last24h.uploaders)</td><td class="text-right">#(last24h.uploaderRequests)</td></tr>
+            <tr><td>Random readers</td><td class="text-right stat-value">#(last24h.randomReaders)</td><td class="text-right">#(last24h.randomReaderRequests)</td></tr>
+            <tr><td>Planetary ruins readers</td><td class="text-right stat-value">#(last24h.seedReaders)</td><td class="text-right">#(last24h.seedReaderRequests)</td></tr>
+            <tr class="active"><td><strong>Total API</strong></td><td class="text-right stat-value"><strong>#(last24h.apiTotal)</strong></td><td class="text-right"><strong>#(last24h.apiTotalRequests)</strong></td></tr>
           </tbody>
         </table>
       </div>
     </div>
   </div>
 
-  <!-- Daily Dashboard Users -->
+  <!-- Last 24 Hours Dashboard Users -->
   <div class="col-sm-6">
     <div class="panel panel-info">
-      <div class="panel-heading"><h3>Today — Dashboard Users</h3></div>
+      <div class="panel-heading"><h3>Last 24 Hours — Dashboard Users</h3></div>
       <div class="panel-body">
         <table class="table table-condensed table-bordered">
           <thead><tr><th>Category</th><th class="text-right">Unique IPs</th><th class="text-right">Requests</th></tr></thead>
           <tbody>
-            <tr><td>Dashboard visitors</td><td class="text-right stat-value">#(dailyDashboard)</td><td class="text-right">#(dailyDashboardRequests)</td></tr>
+            <tr><td>Dashboard visitors</td><td class="text-right stat-value">#(last24h.dashboard)</td><td class="text-right">#(last24h.dashboardRequests)</td></tr>
           </tbody>
         </table>
       </div>
@@ -58,10 +58,10 @@
         <table class="table table-condensed table-bordered">
           <thead><tr><th>Category</th><th class="text-right">Unique IPs</th><th class="text-right">Requests</th></tr></thead>
           <tbody>
-            <tr><td>Uploaders</td><td class="text-right stat-value">#(monthlyUploaders)</td><td class="text-right">#(monthlyUploaderRequests)</td></tr>
-            <tr><td>Random readers</td><td class="text-right stat-value">#(monthlyRandomReaders)</td><td class="text-right">#(monthlyRandomReaderRequests)</td></tr>
-            <tr><td>Planetary ruins readers</td><td class="text-right stat-value">#(monthlySeedReaders)</td><td class="text-right">#(monthlySeedReaderRequests)</td></tr>
-            <tr class="active"><td><strong>Total API</strong></td><td class="text-right stat-value"><strong>#(monthlyApiTotal)</strong></td><td class="text-right"><strong>#(monthlyApiTotalRequests)</strong></td></tr>
+            <tr><td>Uploaders</td><td class="text-right stat-value">#(monthly.uploaders)</td><td class="text-right">#(monthly.uploaderRequests)</td></tr>
+            <tr><td>Random readers</td><td class="text-right stat-value">#(monthly.randomReaders)</td><td class="text-right">#(monthly.randomReaderRequests)</td></tr>
+            <tr><td>Planetary ruins readers</td><td class="text-right stat-value">#(monthly.seedReaders)</td><td class="text-right">#(monthly.seedReaderRequests)</td></tr>
+            <tr class="active"><td><strong>Total API</strong></td><td class="text-right stat-value"><strong>#(monthly.apiTotal)</strong></td><td class="text-right"><strong>#(monthly.apiTotalRequests)</strong></td></tr>
           </tbody>
         </table>
       </div>
@@ -76,7 +76,7 @@
         <table class="table table-condensed table-bordered">
           <thead><tr><th>Category</th><th class="text-right">Unique IPs</th><th class="text-right">Requests</th></tr></thead>
           <tbody>
-            <tr><td>Dashboard visitors</td><td class="text-right stat-value">#(monthlyDashboard)</td><td class="text-right">#(monthlyDashboardRequests)</td></tr>
+            <tr><td>Dashboard visitors</td><td class="text-right stat-value">#(monthly.dashboard)</td><td class="text-right">#(monthly.dashboardRequests)</td></tr>
           </tbody>
         </table>
       </div>
@@ -84,14 +84,27 @@
   </div>
 </div>
 
-<!-- Daily Users & Requests Graph -->
+<!-- Daily API Users & Requests Graph -->
 <div class="row">
   <div class="col-xs-12">
     <div class="panel panel-default">
-      <div class="panel-heading"><h3>Daily Users &amp; Requests — Last 30 Days</h3></div>
+      <div class="panel-heading"><h3>Daily API Users &amp; Requests — Last 30 Days</h3></div>
       <div class="panel-body">
-        <canvas id="dailyChart" height="80" data-chart="#(chartDataAttr)"
-                aria-label="Daily users and requests chart for the last 30 days" role="img"></canvas>
+        <canvas id="apiChart" height="80" data-chart="#(apiChartDataAttr)"
+                aria-label="Daily API users and requests chart for the last 30 days" role="img"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Daily Web (Dashboard) Users & Requests Graph -->
+<div class="row">
+  <div class="col-xs-12">
+    <div class="panel panel-default">
+      <div class="panel-heading"><h3>Daily Web Dashboard Users &amp; Requests — Last 30 Days</h3></div>
+      <div class="panel-body">
+        <canvas id="webChart" height="80" data-chart="#(webChartDataAttr)"
+                aria-label="Daily web dashboard users and page requests chart for the last 30 days" role="img"></canvas>
       </div>
     </div>
   </div>
@@ -99,59 +112,62 @@
 
 <script>
 (function () {
-  var raw = document.getElementById('dailyChart').getAttribute('data-chart') || '';
-  var rows = raw.split(',').filter(Boolean).map(function (s) {
-    var p = s.split('|');
-    return { date: p[0], users: parseInt(p[1]) || 0, requests: parseInt(p[2]) || 0 };
-  });
-  var labels   = rows.map(function (r) { return r.date; });
-  var users    = rows.map(function (r) { return r.users; });
-  var requests = rows.map(function (r) { return r.requests; });
+  function renderChart(canvasId) {
+    var canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    var raw = canvas.getAttribute('data-chart') || '';
+    var rows = raw.split(',').filter(Boolean).map(function (s) {
+      var p = s.split('|');
+      return { date: p[0], users: parseInt(p[1]) || 0, requests: parseInt(p[2]) || 0 };
+    });
 
-  var ctx = document.getElementById('dailyChart').getContext('2d');
-  new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: labels,
-      datasets: [
-        {
-          label: 'Unique Users',
-          data: users,
-          borderColor: 'rgb(54, 162, 235)',
-          backgroundColor: 'rgba(54, 162, 235, 0.1)',
-          tension: 0.2,
-          yAxisID: 'yUsers'
-        },
-        {
-          label: 'Total Requests',
-          data: requests,
-          borderColor: 'rgb(255, 99, 132)',
-          backgroundColor: 'rgba(255, 99, 132, 0.1)',
-          tension: 0.2,
-          yAxisID: 'yRequests'
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      interaction: { mode: 'index', intersect: false },
-      scales: {
-        yUsers: {
-          type: 'linear',
-          position: 'left',
-          title: { display: true, text: 'Unique Users' },
-          beginAtZero: true
-        },
-        yRequests: {
-          type: 'linear',
-          position: 'right',
-          title: { display: true, text: 'Total Requests' },
-          beginAtZero: true,
-          grid: { drawOnChartArea: false }
+    new Chart(canvas.getContext('2d'), {
+      type: 'line',
+      data: {
+        labels: rows.map(function (r) { return r.date; }),
+        datasets: [
+          {
+            label: 'Unique Users',
+            data: rows.map(function (r) { return r.users; }),
+            borderColor: 'rgb(54, 162, 235)',
+            backgroundColor: 'rgba(54, 162, 235, 0.1)',
+            tension: 0.2,
+            yAxisID: 'yUsers'
+          },
+          {
+            label: 'Total Requests',
+            data: rows.map(function (r) { return r.requests; }),
+            borderColor: 'rgb(255, 99, 132)',
+            backgroundColor: 'rgba(255, 99, 132, 0.1)',
+            tension: 0.2,
+            yAxisID: 'yRequests'
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          yUsers: {
+            type: 'linear',
+            position: 'left',
+            title: { display: true, text: 'Unique Users' },
+            beginAtZero: true
+          },
+          yRequests: {
+            type: 'linear',
+            position: 'right',
+            title: { display: true, text: 'Total Requests' },
+            beginAtZero: true,
+            grid: { drawOnChartArea: false }
+          }
         }
       }
-    }
-  });
+    });
+  }
+
+  renderChart('apiChart');
+  renderChart('webChart');
 })();
 </script>
 
