@@ -109,9 +109,9 @@ Standalone HTML (no `tablebase.leaf`). Rendered by `GET /view/visitors`.
 
 Context type: `VisitorsContext` — see `MapsViewController.swift`.
 
-**Summary tables** — four Bootstrap panels (Today API, Today Dashboard, Last-30-Days API, Last-30-Days Dashboard). Each table now has three columns: Category, Unique IPs, and Requests.
+**Summary tables** — four Bootstrap panels (Last 24 Hours API, Last 24 Hours Dashboard, Last-30-Days API, Last-30-Days Dashboard). Each table has three columns: Category, Unique IPs, and Requests. The context passes each period as a `VisitorsStats` object (`last24h`, `monthly`); last-24-hours numbers come from `analytics_hourly_events`.
 
-**Chart** — a Chart.js 4 dual-Y-axis line chart showing daily unique users (left axis) and total requests (right axis) for the last 30 days. Chart data is passed from the controller as a single pipe-delimited string in a `data-chart` attribute (`chartDataAttr`, format: `YYYY-MM-DD|users|requests,...`), then parsed by client-side JavaScript — no `#unsafeHTML` required.
+**Charts** — two Chart.js 4 dual-Y-axis line charts showing daily unique users (left axis) and total requests (right axis) for the last 30 days: one for API calls (`upload`, `random_read`, `seed_read`) and one for web dashboard views (`dashboard`), so crawler noise on the web pages doesn't drown out API usage. Days with no events are filled with zeros. Chart data is passed from the controller as pipe-delimited strings in `data-chart` attributes (`apiChartDataAttr`, `webChartDataAttr`; format: `YYYY-MM-DD|users|requests,...`), then parsed by client-side JavaScript — no `#unsafeHTML` required.
 
 **Top 10 IPs by requests** — one Bootstrap panel per event-type group (Uploaders, Random Readers, Seed Readers, Dashboard Visitors) showing today's top 10 IPs sorted by `request_count`. Rows with anomalously high counts are highlighted:
 - Bootstrap `warning` (yellow background) — >2× group average and ≥5 requests.
@@ -132,4 +132,16 @@ Uses **Bootstrap 3.3.7** (MaxCDN) + **Chart.js 4.4.0** (jsDelivr CDN).
 ## Frontend Notes
 
 - All pages load Bootstrap and jQuery from public CDNs — no local assets except the `Public/` directory (which currently appears empty / unused by templates).
-- The `FileMiddleware` serves static files from `Public/` but the Dockerfile has the `COPY Public` line commented out.
+- The `FileMiddleware` serves static files from `Public/` (`robots.txt`, `js/links.js`).
+
+---
+
+## Crawler protection
+
+Three layers keep automated crawlers from walking the map browser:
+
+- **`Public/robots.txt`** — disallows `/view/`, `/maps` and `/generateProgressDashboard` for well-behaved crawlers (the `/view` landing page stays allowed).
+- **`RobotsTagMiddleware`** (`Sources/App/Middleware/RobotsTagMiddleware.swift`) — adds `X-Robots-Tag: noindex, nofollow` to `/view/*` and `/maps*` responses, and `nofollow` to the `/view` landing page.
+- **Deferred links (`Public/js/links.js`)** — templates never emit `href` for internal navigation. Links are written as `<a data-link="/path">`; the script makes them focusable and attaches the real `href` only on hover, keyboard focus or touch, so scrapers that harvest `href`s from the HTML (or from a headless render right after load) find nothing to follow, while middle-click / open-in-new-tab still work for people. Any template with such links must include `<script src="/js/links.js" defer></script>` (`tablebase.leaf` already does).
+
+None of this stops a bot that deliberately enumerates `/view/map/<id>`; that needs per-IP rate limiting.

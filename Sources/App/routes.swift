@@ -12,6 +12,16 @@ public func routes(_ app: Application) throws {
         return "Hello, world!"
     }
 
+    let progressConfigURL = URL(fileURLWithPath: app.directory.resourcesDirectory)
+        .appendingPathComponent("progress-targets.json")
+    let progressDashboard = ProgressDashboardService(
+        publicDirectory: app.directory.publicDirectory,
+        loadConfig: {
+            try JSONDecoder().decode(ProgressConfig.self, from: Data(contentsOf: progressConfigURL))
+        }
+    )
+    app.get("generateProgressDashboard", use: progressDashboard.generate)
+
     /// API part
     let gameMapController = MapsController()
     let gameMapViewController = MapsViewController()

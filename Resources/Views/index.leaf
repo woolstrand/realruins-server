@@ -4,6 +4,7 @@
 <head>
 <title>#get(title)</title>
 <link href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet">
+<script src="/js/links.js" defer></script>
 </head>
 <body>
 <body class="container">
@@ -11,7 +12,7 @@
 
 <div class="row">
 <div class="col-xs-12 col-sm-3">
-<a href = "/view/maps/topseeds"> <h2>Top seeds</h2> </a>
+<a data-link="/view/maps/topseeds"> <h2>Top seeds</h2> </a>
 </div>
 </div>
 <div class="row">
@@ -57,12 +58,12 @@
 </div>
 <div class="row">
 <div class="col-xs-12 col-sm-3">
-<a href = "/view/maps/random"> <h2>View random map</h2> </a>
+<a data-link="/view/maps/random"> <h2>View random map</h2> </a>
 </div>
 </div>
 <div class="row">
 <div class="col-xs-12 col-sm-3">
-<a href = "/view/stats"> <h2>Statistics</h2> </a>
+<a data-link="/view/stats"> <h2>Statistics</h2> </a>
 </div>
 </div>
 </div>

@@ -52,7 +52,7 @@ Deduplication: application code checks for an existing `(mapId, ip, voteType)` t
 
 ## Analytics
 
-Both analytics tables are created automatically at server startup via `CREATE TABLE IF NOT EXISTS`. No manual setup is needed.
+All analytics tables are created automatically at server startup via `CREATE TABLE IF NOT EXISTS`. No manual setup is needed.
 
 ### analytics_events
 
@@ -76,6 +76,20 @@ Both analytics tables are created automatically at server startup via `CREATE TA
 - `dashboard` — any `GET /view/*` page
 
 **Schema migration**: on startup `AnalyticsService.ensureTables` runs `ALTER TABLE analytics_events ADD COLUMN request_count INT NOT NULL DEFAULT 1` (existing rows are set to 1 by the DEFAULT). The error for "duplicate column" is silently swallowed so the migration is idempotent.
+
+### analytics_hourly_events
+
+**Purpose**: Hour-granular copy of the same events, used only for the rolling "Last 24 Hours" stats on `/view/visitors` (the per-day `analytics_events` table cannot answer a rolling window). Rows older than 2 days are deleted by the daily cleanup.
+
+| Column | MySQL type | Notes |
+|--------|-----------|-------|
+| `id` | INT AUTO_INCREMENT | Primary key |
+| `ip` | VARCHAR(45) | Client IP address |
+| `event_type` | VARCHAR(32) | Same values as `analytics_events.event_type` |
+| `event_hour` | DATETIME | Event time truncated to the hour (DB server time, same clock as `NOW()`) |
+| `request_count` | INT DEFAULT 1 | Total requests from this IP for this event type in this hour |
+
+**Unique constraint**: `(ip, event_type, event_hour)` — incremented with `ON DUPLICATE KEY UPDATE`. "Last 24 hours" = the current partial hour plus the 23 preceding full hours.
 
 ### analytics_daily_summary
 
