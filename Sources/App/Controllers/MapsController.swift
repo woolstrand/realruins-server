@@ -27,8 +27,8 @@ struct Limit: Content {
 enum RandomSelectionMode: String, Codable {
     /// Uniform over all IDs.
     case uniform
-    /// Biased towards recent uploads: start = MAX(id) * RAND()^(1/4),
-    /// so ~59% of picks land in the newest 20% of IDs.
+    /// Biased towards recent uploads: start = MIN + (MAX - MIN) * RAND()^(1/4),
+    /// so ~59% of picks land in the newest 20% of the ID range.
     case recent
 
     /// SQL expression producing a fraction in [0, 1) of the ID range.
@@ -106,14 +106,24 @@ final class MapsController {
         }
 
         // Returns <limit> records starting from a random ID to avoid full-table scan.
-        // The start is scaled against MAX(id) - limit so a pick near the top
-        // still yields a full page. `id` is UNSIGNED, so the subtraction is done
-        // as SIGNED and clamped at 0 to avoid an out-of-range error when
-        // limit > MAX(id).
+        // The start is picked in [MIN(id), MAX(id) - limit]: starting at MIN(id)
+        // keeps picks from piling onto the oldest rows when low IDs are unused,
+        // and stopping `limit` short of MAX(id) keeps a pick near the top from
+        // returning a short page. `id` is UNSIGNED, so the range is computed as
+        // SIGNED and clamped at 0 to avoid an out-of-range error.
+        // Keep MIN/MAX as scalar subqueries in a FROM-less derived table: with a
+        // nested FROM the optimizer merges r2 and re-evaluates RAND() per row,
+        // which skews picks towards low IDs.
         let result = try await req.sqlDb
             .raw("""
                 SELECT GameMap.* FROM GameMap
-                JOIN (SELECT (\(mode.sqlFraction) * GREATEST(CAST((SELECT MAX(id) FROM GameMap) AS SIGNED) - \(bind: limit), 0)) AS id) AS r2
+                JOIN (
+                    SELECT CAST((SELECT MIN(id) FROM GameMap) AS SIGNED)
+                         + \(mode.sqlFraction) * GREATEST(
+                               CAST((SELECT MAX(id) FROM GameMap) AS SIGNED)
+                             - CAST((SELECT MIN(id) FROM GameMap) AS SIGNED)
+                             - \(bind: limit), 0) AS id
+                ) AS r2
                 WHERE GameMap.id >= r2.id
                 ORDER BY GameMap.id ASC
                 LIMIT \(bind: limit)

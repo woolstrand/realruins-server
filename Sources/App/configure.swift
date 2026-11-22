@@ -2,6 +2,7 @@ import Fluent
 import FluentMySQLDriver
 import Vapor
 import Leaf
+import SQLKit
 
 // MARK: - Analytics lifecycle handler
 
@@ -13,6 +14,18 @@ private struct AnalyticsLifecycleHandler: LifecycleHandler {
                 try await AnalyticsService.cleanup(on: app.db)
             } catch {
                 app.logger.error("Analytics initialization failed: \(error)")
+            }
+            // The upload handler looks up an existing map by (gameId, tileId);
+            // without this index every upload scans the whole GameMap table.
+            do {
+                if let sql = app.db as? SQLDatabase {
+                    try await AnalyticsService.addIndexIfNotExists(sql: sql, """
+                        ALTER TABLE GameMap ADD INDEX gameId_tileId (gameId, tileId),
+                        ALGORITHM=INPLACE, LOCK=NONE
+                        """)
+                }
+            } catch {
+                app.logger.error("GameMap index initialization failed: \(error)")
             }
         }
     }
