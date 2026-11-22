@@ -23,6 +23,7 @@ with placeholder fallbacks when variables are not set:
 | `DATABASE_NAME`      | MySQL database name | `realruins` |
 | `DATABASE_USERNAME`  | MySQL username | `realruins` |
 | `DATABASE_PASSWORD`  | MySQL password | `123456` |
+| `DATABASE_MAX_CONNECTIONS_PER_EVENT_LOOP` | DB pool size per event loop (one loop per CPU core) | `4` |
 | `S3_API_KEY`         | DigitalOcean Spaces access key | `123456` |
 | `S3_API_SECRET`      | DigitalOcean Spaces secret key | `123456` |
 | `S3_BUCKET`          | Spaces bucket name | `realruinsv2` |
