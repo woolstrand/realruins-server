@@ -112,6 +112,15 @@ struct AnalyticsService {
             ADD COLUMN request_count INT NOT NULL DEFAULT 0
             """)
 
+        // Covering index for the 30-day visitors-page queries (filter on date and
+        // type, then COUNT(DISTINCT ip) / SUM(request_count)), so they are answered
+        // from the index without a row lookup per event.
+        try await addIndexIfNotExists(sql: sql, """
+            ALTER TABLE analytics_events
+            ADD INDEX idx_date_type_ip_count (event_date, event_type, ip, request_count),
+            ALGORITHM=INPLACE, LOCK=NONE
+            """)
+
         // Hour-granular events, kept for ~2 days only. Used for the rolling
         // "last 24 hours" stats, which the per-day analytics_events table cannot answer.
         try await sql.raw("""
@@ -125,6 +134,19 @@ struct AnalyticsService {
                 INDEX         idx_event_hour  (event_hour)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
             """).run()
+    }
+
+    /// Runs an `ALTER TABLE … ADD INDEX` statement, ignoring MySQL error 1061
+    /// ("Duplicate key name"), which means the index already exists.
+    static func addIndexIfNotExists(sql: SQLDatabase, _ statement: SQLQueryString) async throws {
+        do {
+            try await sql.raw(statement).run()
+        } catch {
+            let desc = "\(error)"
+            guard desc.contains("1061") || desc.lowercased().contains("duplicate key name") else {
+                throw error
+            }
+        }
     }
 
     /// Runs an `ALTER TABLE … ADD COLUMN` statement, silently ignoring MySQL error 1060
