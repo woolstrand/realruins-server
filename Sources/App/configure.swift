@@ -72,6 +72,15 @@ public func configure(_ app: Application) throws {
               fatalError("Database configuration environment variables missing (DATABASE_NAME, DATABASE_USERNAME, DATABASE_PASSWORD)")
     }
 
+    // Connection pool: one pool per event loop (one loop per CPU core). The driver
+    // default of 1 per loop left only 2 connections on the 2-core host, so a single
+    // slow query starved every other request until connectionRequestTimeout.
+    // 4 per loop (8 total) absorbs bursts and slow outliers; more would not add
+    // throughput, since MySQL itself is capped at 1.5 CPUs.
+    let maxConnectionsPerEventLoop = Environment.get("DATABASE_MAX_CONNECTIONS_PER_EVENT_LOOP")
+        .flatMap(Int.init)
+        .flatMap { $0 > 0 ? $0 : nil } ?? 4
+
     app.databases.use(
         .mysql(
             hostname: dbHost,
@@ -79,7 +88,8 @@ public func configure(_ app: Application) throws {
             username: dbUser,
             password: dbPassword,
             database: dbName,
-            tlsConfiguration: nil
+            tlsConfiguration: nil,
+            maxConnectionsPerEventLoop: maxConnectionsPerEventLoop
         ),
         as: .mysql
     )
