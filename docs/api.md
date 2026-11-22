@@ -28,14 +28,15 @@ Returns a paginated JSON array of `GameMap` objects sorted by insertion order.
 ### Random maps
 
 ```
-GET /maps/random?limit=<n>
+GET /maps/random?limit=<n>&selectionMode=<recent|uniform>
 ```
 
-Returns up to `limit` consecutive `GameMap` records starting from a random ID. Implemented with a raw SQL `RAND()` jump to avoid a full-table scan.
+Returns up to `limit` consecutive `GameMap` records starting from a random ID. Implemented with a raw SQL `RAND()` jump to avoid a full-table scan. The start ID is scaled against `MAX(id) - limit`, so a full page is returned unless the table holds fewer than `limit` rows.
 
-| Query param | Type | Default |
-|-------------|------|---------|
-| `limit` | Int | 50 |
+| Query param | Type | Default | Notes |
+|-------------|------|---------|-------|
+| `limit` | Int | 50 | |
+| `selectionMode` | String | `recent` | `recent`: start = `RAND()^(1/4)` of the ID range, so about 59% of picks start in the newest 20% of IDs. `uniform`: start = `RAND()` of the ID range. Any other value returns an error. |
 
 **Response**: `[GameMap]`
 

@@ -23,6 +23,27 @@ struct Limit: Content {
     let offset: Int?
 }
 
+/// How `/maps/random` picks its starting point.
+enum RandomSelectionMode: String, Codable {
+    /// Uniform over all IDs.
+    case uniform
+    /// Biased towards recent uploads: start = MAX(id) * RAND()^(1/4),
+    /// so ~59% of picks land in the newest 20% of IDs.
+    case recent
+
+    /// SQL expression producing a fraction in [0, 1) of the ID range.
+    var sqlFraction: SQLQueryString {
+        switch self {
+        case .uniform: return "RAND()"
+        case .recent: return "POW(RAND(), 0.25)"
+        }
+    }
+}
+
+struct RandomQuery: Content {
+    let selectionMode: String?
+}
+
 struct MapFilter: Content {
     let mapSize: Int?
     let coverage: Int?
@@ -73,11 +94,26 @@ final class MapsController {
         let limitObj = try? req.query.decode(Limit.self)
         let limit = limitObj?.limit ?? 50
 
+        let modeString = (try? req.query.decode(RandomQuery.self))?.selectionMode
+        let mode: RandomSelectionMode
+        if let modeString = modeString {
+            guard let parsed = RandomSelectionMode(rawValue: modeString) else {
+                throw RealRuinsError.invalidParameters("selectionMode must be 'uniform' or 'recent'")
+            }
+            mode = parsed
+        } else {
+            mode = .recent
+        }
+
         // Returns <limit> records starting from a random ID to avoid full-table scan.
+        // The start is scaled against MAX(id) - limit so a pick near the top
+        // still yields a full page. `id` is UNSIGNED, so the subtraction is done
+        // as SIGNED and clamped at 0 to avoid an out-of-range error when
+        // limit > MAX(id).
         let result = try await req.sqlDb
             .raw("""
                 SELECT GameMap.* FROM GameMap
-                JOIN (SELECT (RAND() * (SELECT MAX(id) FROM GameMap)) AS id) AS r2
+                JOIN (SELECT (\(mode.sqlFraction) * GREATEST(CAST((SELECT MAX(id) FROM GameMap) AS SIGNED) - \(bind: limit), 0)) AS id) AS r2
                 WHERE GameMap.id >= r2.id
                 ORDER BY GameMap.id ASC
                 LIMIT \(bind: limit)
